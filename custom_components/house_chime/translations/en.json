@@ -28,78 +28,171 @@
     }
   },
   "options": {
-    "menu": {
-      "init": {
-        "people": "People and priority",
-        "zones": "Playback zones",
-        "quiet": "Quiet mode",
-        "events": "Events and trigger sounds",
-        "voice_media": "Voice media"
-      }
-    },
     "step": {
       "init": {
-        "title": "House Chime options",
-        "description": "Configure people, zones, quiet hours, events, voices, and media paths from Home Assistant.",
+        "title": "House Chime setup",
+        "description": "Configure people, priority, speakers, sounds, events, quiet rules, advanced settings, and a dry-run review.",
         "menu_options": {
-          "people": "People and priority",
-          "zones": "Playback zones",
-          "quiet": "Quiet mode",
-          "events": "Events and trigger sounds",
-          "voice_media": "Voice media"
+          "people": "People",
+          "priority": "Priority",
+          "zones": "Speakers",
+          "media": "Sounds",
+          "events": "Events",
+          "quiet": "Quiet rules",
+          "advanced": "Advanced",
+          "review": "Review / Dry Run"
         }
       },
       "people": {
-        "title": "People and priority",
-        "description": "Select the people House Chime should consider and order them by priority. The first selected person who is home becomes the active household context.",
+        "title": "People",
+        "description": "Select the Home Assistant people House Chime should use for household context. Discovered people: {person_count}.",
         "data": {
-          "selected_people": "People",
-          "priority_order": "Priority order",
-          "default_context_id": "Fallback context",
-          "fallback_trackers": "Fallback device trackers"
+          "selected_people": "People"
         },
         "data_description": {
-          "priority_order": "Comma-separated person IDs in priority order, for example: david, scarlett, juliette.",
-          "default_context_id": "The context to use when no selected person is home.",
-          "fallback_trackers": "{fallback_help}. Discovered device trackers: {tracker_count}."
+          "selected_people": "Only selected people are considered when House Chime chooses the active household context."
+        }
+      },
+      "priority": {
+        "title": "Priority",
+        "description": "Rank selected people. The first selected person who is home becomes the active household context.",
+        "data": {
+          "priority_1": "First priority",
+          "priority_2": "Second priority",
+          "priority_3": "Third priority",
+          "priority_4": "Fourth priority",
+          "priority_5": "Fifth priority",
+          "default_context_id": "Fallback context"
+        },
+        "data_description": {
+          "default_context_id": "Used when none of the selected people are home."
         }
       },
       "zones": {
-        "title": "Playback zones",
-        "description": "Select the Music Assistant or media player zones used for announcements. Quiet-excluded zones are removed from playback during the quiet-zone window.",
+        "title": "Speakers",
+        "description": "Select the speakers or Music Assistant players used for announcements. Recommended players shown: {recommended_count}. Total media players discovered: {total_count}. Advanced shows the full list when needed.",
         "data": {
-          "selected_zones": "Announcement zones",
-          "quiet_excluded_zones": "Quiet-excluded zones"
+          "selected_zones": "Announcement speakers"
+        }
+      },
+      "media": {
+        "title": "Sounds",
+        "description": "Upload audio through Home Assistant Media / Local Media first, then select the announcement and chime sounds here.",
+        "data": {
+          "front_door_approach_common_trigger_sound": "Approach chime sound",
+          "front_door_package_common_trigger_sound": "Package chime sound",
+          "front_door_doorbell_common_trigger_sound": "Doorbell chime sound",
+          "eve_front_door_approach_media_path": "Eve - Approach announcement",
+          "eve_front_door_package_media_path": "Eve - Package announcement",
+          "eve_front_door_doorbell_media_path": "Eve - Doorbell announcement",
+          "leo_front_door_approach_media_path": "Leo - Approach announcement",
+          "leo_front_door_package_media_path": "Leo - Package announcement",
+          "leo_front_door_doorbell_media_path": "Leo - Doorbell announcement",
+          "pierce_front_door_approach_media_path": "Pierce - Approach announcement",
+          "pierce_front_door_package_media_path": "Pierce - Package announcement",
+          "pierce_front_door_doorbell_media_path": "Pierce - Doorbell announcement",
+          "samantha_front_door_approach_media_path": "Samantha - Approach announcement",
+          "samantha_front_door_package_media_path": "Samantha - Package announcement",
+          "samantha_front_door_doorbell_media_path": "Samantha - Doorbell announcement"
+        }
+      },
+      "events": {
+        "title": "Events",
+        "description": "Choose one announcement event to configure.",
+        "menu_options": {
+          "event_front_door_approach": "Approach",
+          "event_front_door_package": "Package",
+          "event_front_door_doorbell": "Doorbell"
+        }
+      },
+      "event_front_door_approach": {
+        "title": "Approach",
+        "description": "Configure the Approach announcement.",
+        "data": {
+          "enabled": "Enable Approach",
+          "default_voice_id": "Default voice",
+          "person_voice_1": "Voice for first selected person",
+          "person_voice_2": "Voice for second selected person",
+          "person_voice_3": "Voice for third selected person",
+          "person_voice_4": "Voice for fourth selected person",
+          "person_voice_5": "Voice for fifth selected person"
+        }
+      },
+      "event_front_door_package": {
+        "title": "Package",
+        "description": "Configure the Package announcement.",
+        "data": {
+          "enabled": "Enable Package",
+          "default_voice_id": "Default voice",
+          "person_voice_1": "Voice for first selected person",
+          "person_voice_2": "Voice for second selected person",
+          "person_voice_3": "Voice for third selected person",
+          "person_voice_4": "Voice for fourth selected person",
+          "person_voice_5": "Voice for fifth selected person"
+        }
+      },
+      "event_front_door_doorbell": {
+        "title": "Doorbell",
+        "description": "Configure the Doorbell announcement.",
+        "data": {
+          "enabled": "Enable Doorbell",
+          "default_voice_id": "Default voice",
+          "person_voice_1": "Voice for first selected person",
+          "person_voice_2": "Voice for second selected person",
+          "person_voice_3": "Voice for third selected person",
+          "person_voice_4": "Voice for fourth selected person",
+          "person_voice_5": "Voice for fifth selected person"
         }
       },
       "quiet": {
-        "title": "Quiet mode",
-        "description": "Configure the global quiet window and quiet-zone window.",
+        "title": "Quiet rules",
+        "description": "Configure the global quiet window. Quiet-zone exclusions are in Advanced.",
         "data": {
           "enabled": "Enable quiet mode",
           "start": "Quiet start",
           "end": "Quiet end",
-          "volume_multiplier": "Quiet volume multiplier",
-          "zone_start": "Quiet-zone start",
-          "zone_end": "Quiet-zone end"
+          "volume_multiplier": "Quiet volume"
         },
         "data_description": {
           "start": "24-hour time, for example 22:00.",
           "end": "24-hour time, for example 08:00.",
-          "volume_multiplier": "Volume multiplier during quiet hours. 0.5 means 50 percent of the normal announcement volume.",
-          "zone_start": "Optional quiet-zone start time in 24-hour HH:MM format.",
-          "zone_end": "Optional quiet-zone end time in 24-hour HH:MM format."
+          "volume_multiplier": "Volume multiplier during quiet hours. 0.5 means 50 percent of the normal announcement volume."
         }
       },
-      "events": {
-        "title": "Events and trigger sounds",
-        "description": "Enable each event, pick default voices, assign optional person-specific voices, configure common trigger sounds, and choose bridge helpers.",
-        "data": {}
+      "advanced": {
+        "title": "Advanced",
+        "description": "Configure fallback trackers, package bridge helpers, duplicate suppression, quiet-zone exclusions, and per-person chime overrides.",
+        "data": {
+          "quiet_excluded_zones": "Quiet-zone excluded speakers",
+          "selected_zones_all": "All announcement speakers",
+          "zone_start": "Quiet-zone start",
+          "zone_end": "Quiet-zone end",
+          "front_door_approach_bridge_helper_entity_id": "Approach bridge helper",
+          "front_door_package_bridge_helper_entity_id": "Package bridge helper",
+          "front_door_doorbell_bridge_helper_entity_id": "Doorbell bridge helper",
+          "front_door_approach_duplicate_window_seconds": "Approach duplicate window",
+          "front_door_package_duplicate_window_seconds": "Package duplicate window",
+          "front_door_doorbell_duplicate_window_seconds": "Doorbell duplicate window",
+          "front_door_approach_common_trigger_sound": "Raw Approach chime path",
+          "front_door_package_common_trigger_sound": "Raw Package chime path",
+          "front_door_doorbell_common_trigger_sound": "Raw Doorbell chime path",
+          "eve_front_door_approach_media_path": "Raw Eve - Approach announcement path",
+          "eve_front_door_package_media_path": "Raw Eve - Package announcement path",
+          "eve_front_door_doorbell_media_path": "Raw Eve - Doorbell announcement path",
+          "leo_front_door_approach_media_path": "Raw Leo - Approach announcement path",
+          "leo_front_door_package_media_path": "Raw Leo - Package announcement path",
+          "leo_front_door_doorbell_media_path": "Raw Leo - Doorbell announcement path",
+          "pierce_front_door_approach_media_path": "Raw Pierce - Approach announcement path",
+          "pierce_front_door_package_media_path": "Raw Pierce - Package announcement path",
+          "pierce_front_door_doorbell_media_path": "Raw Pierce - Doorbell announcement path",
+          "samantha_front_door_approach_media_path": "Raw Samantha - Approach announcement path",
+          "samantha_front_door_package_media_path": "Raw Samantha - Package announcement path",
+          "samantha_front_door_doorbell_media_path": "Raw Samantha - Doorbell announcement path"
+        }
       },
-      "voice_media": {
-        "title": "Voice media",
-        "description": "Map each voice personality to approved local-media MP3 files for each event. Use media-source://media_source/local/... paths.",
-        "data": {}
+      "review": {
+        "title": "Review / Dry Run",
+        "description": "No audio will play from this step.\n\n{summary}\n\n{music_assistant}"
       }
     }
   }
