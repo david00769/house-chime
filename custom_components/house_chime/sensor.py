@@ -1,0 +1,73 @@
+"""Sensor platform for House Chime."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from homeassistant.components.sensor import SensorEntity
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
+
+from .const import DOMAIN, SIGNAL_STATUS_UPDATED
+from .status import SENSOR_DESCRIPTIONS, StatusEntityDescription
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities) -> None:
+    """Set up status sensors."""
+
+    async_add_entities(
+        HouseChimeStatusSensor(hass, entry, description)
+        for description in SENSOR_DESCRIPTIONS
+    )
+
+
+class HouseChimeStatusSensor(SensorEntity):
+    """Status sensor backed by integration runtime state."""
+
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        entry: ConfigEntry,
+        description: StatusEntityDescription,
+    ) -> None:
+        self.hass = hass
+        self.entry = entry
+        self.description = description
+        self._attr_name = description.name
+        self._attr_unique_id = f"{entry.entry_id}_{description.key}"
+        self._attr_icon = description.icon
+
+    @property
+    def native_value(self) -> Any:
+        value = self._status.get(self.description.key)
+        if isinstance(value, list):
+            return ", ".join(value)
+        return value
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        if self.description.key == "selected_target_zones":
+            return {"zones": self._status.get("selected_target_zones", [])}
+        if self.description.key == "last_failure_reason":
+            return {"last_resolution": self._status.get("last_resolution")}
+        return {}
+
+    async def async_added_to_hass(self) -> None:
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                SIGNAL_STATUS_UPDATED,
+                self._handle_status_update,
+            )
+        )
+
+    @callback
+    def _handle_status_update(self) -> None:
+        self.async_write_ha_state()
+
+    @property
+    def _status(self) -> dict[str, Any]:
+        return self.hass.data[DOMAIN][self.entry.entry_id]["status"]

@@ -1,0 +1,48 @@
+discover:
+  name: Discover entities
+  description: Discover candidate people, device trackers, media players, and bridge helpers from Home Assistant state.
+
+resolve:
+  name: Resolve announcement
+  description: Resolve an event into media, voice, target zones, volume, quiet rules, and diagnostics without playing it.
+  fields:
+    event_id:
+      name: Event ID
+      description: Announcement event to resolve.
+      required: true
+      selector:
+        select:
+          options:
+            - front_door_approach
+            - front_door_package
+            - front_door_doorbell
+
+play:
+  name: Play announcement
+  description: Resolve and play an announcement through Music Assistant/Juke.
+  fields:
+    event_id:
+      name: Event ID
+      description: Announcement event to play.
+      required: true
+      selector:
+        select:
+          options:
+            - front_door_approach
+            - front_door_package
+            - front_door_doorbell
+
+bridge_trigger:
+  name: Bridge trigger
+  description: Resolve and play an announcement that originated from an external bridge helper, then reset the helper when configured.
+  fields:
+    event_id:
+      name: Event ID
+      description: Announcement event to play from a bridge.
+      required: true
+      selector:
+        select:
+          options:
+            - front_door_approach
+            - front_door_package
+            - front_door_doorbell

@@ -1,0 +1,121 @@
+from __future__ import annotations
+
+import unittest
+
+from custom_components.house_chime.models import AnnouncementResolution
+from custom_components.house_chime.playback import play_music_assistant_announcement
+
+
+class FakeState:
+    def __init__(self, entity_id: str, state: str, attributes: dict) -> None:
+        self.entity_id = entity_id
+        self.state = state
+        self.attributes = attributes
+
+
+class FakeStates:
+    def __init__(self) -> None:
+        self._states = {
+            "media_player.great_room": FakeState(
+                "media_player.great_room",
+                "playing",
+                {"volume_level": 0.3, "source": "AirPlay"},
+            ),
+            "media_player.bedroom": FakeState(
+                "media_player.bedroom",
+                "idle",
+                {"volume_level": 0.2, "source": "Juke"},
+            ),
+        }
+
+    def get(self, entity_id: str):
+        return self._states.get(entity_id)
+
+
+class FakeServices:
+    def __init__(self, states: FakeStates) -> None:
+        self.states = states
+        self.calls = []
+
+    async def async_call(
+        self,
+        domain: str,
+        service: str,
+        data: dict,
+        blocking: bool = False,
+        target: dict | None = None,
+    ) -> None:
+        self.calls.append((domain, service, data, blocking, target))
+        if domain == "music_assistant" and service == "play_announcement":
+            for entity_id in target["entity_id"]:
+                self.states._states[entity_id].attributes["source"] = "Announcement"
+        if domain == "media_player" and service == "select_source":
+            raise ValueError("select_source unsupported")
+
+
+class FakeHass:
+    def __init__(self) -> None:
+        self.states = FakeStates()
+        self.services = FakeServices(self.states)
+        self.config = type("Config", (), {"internal_url": "http://ha.local:8123"})()
+
+
+class PlaybackTest(unittest.IsolatedAsyncioTestCase):
+    async def test_playback_uses_simultaneous_targets_and_restores_volume(self) -> None:
+        hass = FakeHass()
+        resolution = AnnouncementResolution(
+            event_id="front_door_approach",
+            ok=True,
+            media_path="media-source://media_source/local/announcements/front-door.mp3",
+            target_player_entity_ids=["media_player.great_room", "media_player.bedroom"],
+            volume_level=0.8,
+        )
+
+        warnings = await play_music_assistant_announcement(hass, resolution)
+
+        music_calls = [
+            call for call in hass.services.calls if call[0] == "music_assistant"
+        ]
+        self.assertEqual(len(music_calls), 1)
+        self.assertEqual(
+            music_calls[0][4]["entity_id"],
+            ["media_player.great_room", "media_player.bedroom"],
+        )
+        self.assertEqual(
+            music_calls[0][2]["url"],
+            "http://ha.local:8123/media/local/announcements/front-door.mp3",
+        )
+        self.assertEqual(music_calls[0][2]["announce_volume"], 80)
+
+        volume_calls = [
+            call for call in hass.services.calls if call[0:2] == ("media_player", "volume_set")
+        ]
+        self.assertEqual(volume_calls[0][2]["volume_level"], 0.3)
+        self.assertEqual(volume_calls[1][2]["volume_level"], 0.2)
+        self.assertIn("source_restore_unsupported:media_player.great_room", warnings)
+
+    async def test_playback_passes_trigger_sound_as_pre_announce(self) -> None:
+        hass = FakeHass()
+        resolution = AnnouncementResolution(
+            event_id="front_door_doorbell",
+            ok=True,
+            media_path="media-source://media_source/local/announcements/voice.mp3",
+            trigger_sound_path="media-source://media_source/local/announcements/doorbell.mp3",
+            target_player_entity_ids=["media_player.great_room"],
+            volume_level=0.5,
+        )
+
+        await play_music_assistant_announcement(hass, resolution)
+
+        music_call = [
+            call for call in hass.services.calls if call[0] == "music_assistant"
+        ][0]
+        self.assertTrue(music_call[2]["use_pre_announce"])
+        self.assertEqual(
+            music_call[2]["pre_announce_url"],
+            "http://ha.local:8123/media/local/announcements/doorbell.mp3",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

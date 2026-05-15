@@ -1,0 +1,106 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "House Chime",
+        "description": "Create the announcement control integration. House Chime discovers Home Assistant people, playback zones, helpers, and approved media paths, then plays announcements through Music Assistant.",
+        "data": {
+          "name": "Name"
+        },
+        "data_description": {
+          "name": "The display name for this House Chime installation."
+        }
+      }
+    }
+  },
+  "issues": {
+    "missing_media": {
+      "title": "Announcement media is missing",
+      "description": "House Chime could not find a configured media asset for `{event_id}`. Check the configured media path in House Chime options and confirm the file exists in Home Assistant local media. Error: `{error}`"
+    },
+    "no_target_zones": {
+      "title": "No announcement zones are selected",
+      "description": "House Chime resolved `{event_id}`, but no playable target zones remained after selected-zone and quiet-zone rules were applied. Select at least one available playback zone in House Chime options. Error: `{error}`"
+    },
+    "missing_music_assistant_service": {
+      "title": "Music Assistant announcement service is missing",
+      "description": "House Chime requires `music_assistant.play_announcement` for playback. Install or enable Music Assistant before using House Chime playback services. Error: `{error}`"
+    }
+  },
+  "options": {
+    "menu": {
+      "init": {
+        "people": "People and priority",
+        "zones": "Playback zones",
+        "quiet": "Quiet mode",
+        "events": "Events and trigger sounds",
+        "voice_media": "Voice media"
+      }
+    },
+    "step": {
+      "init": {
+        "title": "House Chime options",
+        "description": "Configure people, zones, quiet hours, events, voices, and media paths from Home Assistant.",
+        "menu_options": {
+          "people": "People and priority",
+          "zones": "Playback zones",
+          "quiet": "Quiet mode",
+          "events": "Events and trigger sounds",
+          "voice_media": "Voice media"
+        }
+      },
+      "people": {
+        "title": "People and priority",
+        "description": "Select the people House Chime should consider and order them by priority. The first selected person who is home becomes the active household context.",
+        "data": {
+          "selected_people": "People",
+          "priority_order": "Priority order",
+          "default_context_id": "Fallback context",
+          "fallback_trackers": "Fallback device trackers"
+        },
+        "data_description": {
+          "priority_order": "Comma-separated person IDs in priority order, for example: david, scarlett, juliette.",
+          "default_context_id": "The context to use when no selected person is home.",
+          "fallback_trackers": "{fallback_help}. Discovered device trackers: {tracker_count}."
+        }
+      },
+      "zones": {
+        "title": "Playback zones",
+        "description": "Select the Music Assistant or media player zones used for announcements. Quiet-excluded zones are removed from playback during the quiet-zone window.",
+        "data": {
+          "selected_zones": "Announcement zones",
+          "quiet_excluded_zones": "Quiet-excluded zones"
+        }
+      },
+      "quiet": {
+        "title": "Quiet mode",
+        "description": "Configure the global quiet window and quiet-zone window.",
+        "data": {
+          "enabled": "Enable quiet mode",
+          "start": "Quiet start",
+          "end": "Quiet end",
+          "volume_multiplier": "Quiet volume multiplier",
+          "zone_start": "Quiet-zone start",
+          "zone_end": "Quiet-zone end"
+        },
+        "data_description": {
+          "start": "24-hour time, for example 22:00.",
+          "end": "24-hour time, for example 08:00.",
+          "volume_multiplier": "Volume multiplier during quiet hours. 0.5 means 50 percent of the normal announcement volume.",
+          "zone_start": "Optional quiet-zone start time in 24-hour HH:MM format.",
+          "zone_end": "Optional quiet-zone end time in 24-hour HH:MM format."
+        }
+      },
+      "events": {
+        "title": "Events and trigger sounds",
+        "description": "Enable each event, pick default voices, assign optional person-specific voices, configure common trigger sounds, and choose bridge helpers.",
+        "data": {}
+      },
+      "voice_media": {
+        "title": "Voice media",
+        "description": "Map each voice personality to approved local-media MP3 files for each event. Use media-source://media_source/local/... paths.",
+        "data": {}
+      }
+    }
+  }
+}

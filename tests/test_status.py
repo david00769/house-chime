@@ -1,0 +1,47 @@
+from __future__ import annotations
+
+import unittest
+
+from custom_components.house_chime.models import AnnouncementConfig, AnnouncementResolution
+from custom_components.house_chime.status import initial_status, record_resolution
+
+
+class StatusTest(unittest.TestCase):
+    def test_record_resolution_updates_lovelace_status_fields(self) -> None:
+        status = initial_status(AnnouncementConfig(default_context_id="david"))
+        resolution = AnnouncementResolution(
+            event_id="front_door_approach",
+            ok=True,
+            active_context_id="david",
+            media_path="media-source://media_source/local/announcements/front-door.mp3",
+            target_player_entity_ids=["media_player.great_room"],
+            quiet_active=True,
+        )
+
+        record_resolution(status, resolution, outcome="played")
+
+        self.assertEqual(status["last_resolved_event"], "front_door_approach")
+        self.assertEqual(status["last_played_event"], "front_door_approach")
+        self.assertEqual(status["active_household_context"], "david")
+        self.assertEqual(status["selected_target_zones"], ["media_player.great_room"])
+        self.assertEqual(status["last_media_path"], "media-source://media_source/local/announcements/front-door.mp3")
+        self.assertTrue(status["quiet_mode_active"])
+        self.assertTrue(status["last_resolution_valid"])
+
+    def test_record_failure_updates_failure_fields(self) -> None:
+        status = initial_status(AnnouncementConfig())
+        resolution = AnnouncementResolution(
+            event_id="front_door_package",
+            ok=False,
+            errors=["missing_media_asset:test.mp3"],
+        )
+
+        record_resolution(status, resolution, outcome="failed")
+
+        self.assertEqual(status["last_failed_event"], "front_door_package")
+        self.assertEqual(status["last_failure_reason"], "missing_media_asset:test.mp3")
+        self.assertFalse(status["last_resolution_valid"])
+
+
+if __name__ == "__main__":
+    unittest.main()
