@@ -41,12 +41,39 @@ Use `resolve` for dry runs. Use `play` for manual announcements. Use
 `bridge_trigger` for external helper-driven automations that should reset a
 helper after handling an event.
 
+## Guided Setup
+
+After installation, open `Settings -> Devices & services -> House Chime ->
+Configure`.
+
+The setup flow is intentionally operator-focused:
+
+- `People`: choose Home Assistant `person.*` entities.
+- `Priority`: rank who should drive the active household context.
+- `Speakers`: choose recommended Music Assistant/Juke announcement targets.
+- `Sounds`: select already-uploaded chime and announcement audio.
+- `Events`: enable and map voices for Approach, Package, and Doorbell.
+- `Quiet rules`: set quiet hours and quiet volume.
+- `Advanced`: fallback trackers, bridge helpers, duplicate windows, quiet-zone
+  exclusions, and per-person chime overrides.
+- `Review / Dry Run`: validate the setup without playing audio.
+
+Diagnostics remain available, but they are not part of the default setup path.
+
 ## Media
 
 House Chime consumes approved playable files that already exist in Home
 Assistant local media. It does not create announcement audio.
 
-Use `media-source://media_source/local/...` paths in the options flow. Example:
+V1 uses Home Assistant's built-in media upload/browser path:
+
+1. Open Home Assistant Media.
+2. Upload audio into Local Media, for example under `announcements/`.
+3. Return to House Chime `Configure -> Sounds`.
+4. Select the uploaded media in the media picker.
+
+Advanced users can still provide raw `media-source://media_source/local/...`
+paths where Home Assistant's media selector is not available. Example:
 
 ```text
 media-source://media_source/local/announcements/front-door.mp3
@@ -54,11 +81,14 @@ media-source://media_source/local/announcements/front-door.mp3
 
 ## Events
 
-The initial event IDs are:
+The initial public events are:
 
-- `front_door_approach`
-- `front_door_package`
-- `front_door_doorbell`
+- Approach
+- Package
+- Doorbell
+
+Internal event IDs are still used by services and automations, but the setup UI
+uses the friendly names above.
 
 ## Development
 

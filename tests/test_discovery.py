@@ -7,6 +7,7 @@ from custom_components.house_chime.discovery import (
     discover_helpers,
     discover_media_players,
     discover_people,
+    is_recommended_media_player,
 )
 
 
@@ -42,6 +43,18 @@ class DiscoveryTest(unittest.TestCase):
             [item.entity_id for item in discover_helpers(states)],
             ["input_boolean.google_package_arrived"],
         )
+
+    def test_ranks_likely_music_assistant_or_juke_players_first(self) -> None:
+        states = [
+            State("media_player.tv", "idle", "TV"),
+            State("media_player.juke_great_room", "idle", "Great Room"),
+        ]
+
+        players = discover_media_players(states)
+
+        self.assertEqual([item.entity_id for item in players], ["media_player.juke_great_room", "media_player.tv"])
+        self.assertTrue(is_recommended_media_player(players[0]))
+        self.assertFalse(is_recommended_media_player(players[1]))
 
 
 if __name__ == "__main__":

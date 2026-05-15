@@ -4,41 +4,34 @@ views:
     path: house-chime
     icon: mdi:speaker-message
     cards:
+      - type: markdown
+        title: House Chime
+        content: |
+          Use this page to check readiness, run silent dry runs, and manually test announcements.
+
+          Configure House Chime from **Settings → Devices & services → House Chime → Configure**.
+
       - type: entities
-        title: Runtime Status
+        title: Operator Status
         entities:
           - entity: binary_sensor.house_chime_integration_ready
-            name: Integration ready
+            name: Ready
           - entity: sensor.house_chime_active_household_context
-            name: Active context
+            name: Active household context
           - entity: binary_sensor.house_chime_quiet_mode_active
-            name: Quiet mode
-          - entity: binary_sensor.house_chime_last_resolution_valid
-            name: Last resolution valid
-          - entity: sensor.house_chime_last_failure_reason
-            name: Last failure
-
-      - type: entities
-        title: Playback Plan
-        entities:
-          - entity: sensor.house_chime_last_resolved_event
-            name: Last resolved
-          - entity: sensor.house_chime_last_played_event
-            name: Last played
-          - entity: sensor.house_chime_last_media_path
-            name: Last media
+            name: Quiet mode active
           - entity: sensor.house_chime_selected_target_zones
-            name: Selected zones
-          - entity: binary_sensor.house_chime_package_bridge_helper_active
-            name: Package event pending
+            name: Announcement speakers
+          - entity: sensor.house_chime_last_played_event
+            name: Last announcement
 
       - type: grid
-        title: Resolve Dry Runs
+        title: Dry Run
         columns: 3
         square: false
         cards:
           - type: button
-            name: Resolve Approach
+            name: Dry Run Approach
             icon: mdi:file-search
             tap_action:
               action: call-service
@@ -46,7 +39,7 @@ views:
               data:
                 event_id: front_door_approach
           - type: button
-            name: Resolve Package
+            name: Dry Run Package
             icon: mdi:file-search
             tap_action:
               action: call-service
@@ -54,7 +47,7 @@ views:
               data:
                 event_id: front_door_package
           - type: button
-            name: Resolve Doorbell
+            name: Dry Run Doorbell
             icon: mdi:file-search
             tap_action:
               action: call-service
@@ -62,3 +55,46 @@ views:
               data:
                 event_id: front_door_doorbell
 
+      - type: grid
+        title: Audible Tests
+        columns: 3
+        square: false
+        cards:
+          - type: button
+            name: Play Approach
+            icon: mdi:door-open
+            tap_action:
+              action: call-service
+              service: house_chime.play
+              data:
+                event_id: front_door_approach
+          - type: button
+            name: Play Package
+            icon: mdi:package-variant
+            tap_action:
+              action: call-service
+              service: house_chime.play
+              data:
+                event_id: front_door_package
+          - type: button
+            name: Play Doorbell
+            icon: mdi:doorbell-video
+            tap_action:
+              action: call-service
+              service: house_chime.play
+              data:
+                event_id: front_door_doorbell
+
+      - type: entities
+        title: Advanced Diagnostics
+        entities:
+          - entity: binary_sensor.house_chime_last_resolution_valid
+            name: Last dry run valid
+          - entity: sensor.house_chime_last_resolved_event
+            name: Last dry run
+          - entity: sensor.house_chime_last_media_path
+            name: Last media
+          - entity: sensor.house_chime_last_failure_reason
+            name: Last failure
+          - entity: binary_sensor.house_chime_package_bridge_helper_active
+            name: Package bridge pending
