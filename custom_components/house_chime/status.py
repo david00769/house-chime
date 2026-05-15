@@ -35,6 +35,12 @@ BINARY_SENSOR_DESCRIPTIONS = (
 )
 
 
+def status_entity_name(description: StatusEntityDescription) -> str:
+    """Return the public HA entity name used to derive stable entity IDs."""
+
+    return f"House Chime {description.name}"
+
+
 def initial_status(config: AnnouncementConfig) -> dict[str, Any]:
     """Return initial status for a loaded integration entry."""
 

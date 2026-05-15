@@ -10,7 +10,7 @@ from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import DOMAIN, SIGNAL_STATUS_UPDATED
-from .status import BINARY_SENSOR_DESCRIPTIONS, StatusEntityDescription
+from .status import BINARY_SENSOR_DESCRIPTIONS, StatusEntityDescription, status_entity_name
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities) -> None:
@@ -25,7 +25,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 class HouseChimeStatusBinarySensor(BinarySensorEntity):
     """Boolean status sensor backed by integration runtime state."""
 
-    _attr_has_entity_name = True
+    _attr_has_entity_name = False
 
     def __init__(
         self,
@@ -36,7 +36,7 @@ class HouseChimeStatusBinarySensor(BinarySensorEntity):
         self.hass = hass
         self.entry = entry
         self.description = description
-        self._attr_name = description.name
+        self._attr_name = status_entity_name(description)
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
         self._attr_icon = description.icon
 

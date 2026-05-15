@@ -3,10 +3,21 @@ from __future__ import annotations
 import unittest
 
 from custom_components.house_chime.models import AnnouncementConfig, AnnouncementResolution
-from custom_components.house_chime.status import initial_status, record_resolution
+from custom_components.house_chime.status import (
+    SENSOR_DESCRIPTIONS,
+    initial_status,
+    record_resolution,
+    status_entity_name,
+)
 
 
 class StatusTest(unittest.TestCase):
+    def test_status_entity_names_are_house_chime_prefixed(self) -> None:
+        self.assertEqual(
+            status_entity_name(SENSOR_DESCRIPTIONS[0]),
+            "House Chime Last resolved event",
+        )
+
     def test_record_resolution_updates_lovelace_status_fields(self) -> None:
         status = initial_status(AnnouncementConfig(default_context_id="david"))
         resolution = AnnouncementResolution(
