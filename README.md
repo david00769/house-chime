@@ -74,3 +74,11 @@ uv run python -m unittest discover -s tests
 This is an early beta integration. Run dry-run resolution and non-audible
 configuration checks first. Do not run live playback tests during quiet hours.
 
+## Public Repo Boundary
+
+This repository is the public HACS package boundary. Do not commit
+house-specific Home Assistant entity IDs, local IP addresses, deployment logs,
+screenshots, generated audio, voice profiles, or private testing notes here.
+
+Keep private project memory in the ignored `project-memory/` folder or in the
+separate private planning workspace.

@@ -5,3 +5,5 @@
 __pycache__/
 *.pyc
 
+# Private local notes and deployment evidence stay out of the public HACS repo.
+project-memory/
