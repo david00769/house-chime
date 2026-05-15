@@ -56,7 +56,7 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
     """Options flow for the operator-managed runtime config."""
 
     def __init__(self, config_entry) -> None:
-        self.config_entry = config_entry
+        self._config_entry = config_entry
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
         """Show the configuration menu."""
@@ -351,7 +351,7 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         )
 
     def _config(self) -> AnnouncementConfig:
-        current_config = self.config_entry.options.get(CONF_ACTIVE_CONFIG) or self.config_entry.data.get(
+        current_config = self._config_entry.options.get(CONF_ACTIVE_CONFIG) or self._config_entry.data.get(
             CONF_ACTIVE_CONFIG
         )
         migrated, _ = migrate_config_dict(current_config)
