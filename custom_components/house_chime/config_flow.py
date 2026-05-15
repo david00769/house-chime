@@ -11,11 +11,45 @@ from homeassistant.const import CONF_NAME
 from homeassistant.helpers import selector
 
 from .const import CONF_ACTIVE_CONFIG, DEFAULT_EVENTS, DEFAULT_NAME, DOMAIN
-from .discovery import discover_device_trackers, discover_helpers, discover_media_players, discover_people
-from .models import AnnouncementConfig, EventConfig, PersonConfig, QuietConfig, VoicePersonality, ZoneConfig
+from .discovery import (
+    discover_device_trackers,
+    discover_helpers,
+    discover_media_players,
+    discover_people,
+    is_recommended_media_player,
+)
+from .models import (
+    AnnouncementConfig,
+    EventConfig,
+    PersonConfig,
+    QuietConfig,
+    ResolverRuntime,
+    VoicePersonality,
+    ZoneConfig,
+)
+from .resolver import resolve_announcement
 from .storage import migrate_config_dict
 
 NONE_VALUE = "__none__"
+
+EVENT_LABELS = {
+    "front_door_approach": "Approach",
+    "front_door_package": "Package",
+    "front_door_doorbell": "Doorbell",
+}
+
+PRIORITY_FIELDS = ("priority_1", "priority_2", "priority_3", "priority_4", "priority_5")
+
+SETUP_MENU_OPTIONS = [
+    "people",
+    "priority",
+    "zones",
+    "media",
+    "events",
+    "quiet",
+    "advanced",
+    "review",
+]
 
 
 class HouseChimeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -61,17 +95,13 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
         """Show the configuration menu."""
 
-        return self.async_show_menu(
-            step_id="init",
-            menu_options=["people", "zones", "quiet", "events", "voice_media"],
-        )
+        return self.async_show_menu(step_id="init", menu_options=SETUP_MENU_OPTIONS)
 
     async def async_step_people(self, user_input: dict[str, Any] | None = None):
-        """Configure selected people and priority."""
+        """Configure selected people."""
 
         config = self._config()
         discovered_people = discover_people(self.hass.states.async_all())
-        discovered_trackers = discover_device_trackers(self.hass.states.async_all())
         people_options = _options(discovered_people)
         current_people_by_entity = {
             person.entity_id: person for person in config.people if person.entity_id
@@ -79,13 +109,8 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         selected_people = [
             person.entity_id for person in config.people if person.in_scope and person.entity_id
         ]
-        default_context_options = [
-            selector.SelectOptionDict(value=person.id, label=person.name) for person in config.people
-        ] or [selector.SelectOptionDict(value=NONE_VALUE, label="None")]
-
         if user_input is not None:
             selected = list(user_input.get("selected_people", []))
-            tracker_by_person = _parse_mapping(user_input.get("fallback_trackers", ""))
             people = []
             for entity_id in selected:
                 record = next((item for item in discovered_people if item.entity_id == entity_id), None)
@@ -96,16 +121,18 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                         id=person_id,
                         name=record.name if record else person_id,
                         entity_id=entity_id,
-                        fallback_tracker_entity_ids=tracker_by_person.get(person_id, []),
+                        fallback_tracker_entity_ids=existing.fallback_tracker_entity_ids if existing else [],
                         in_scope=True,
                         default_voice_id=existing.default_voice_id if existing else None,
                         custom_voice_profile=existing.custom_voice_profile if existing else None,
                     )
                 )
             config.people = people
-            config.person_priority = _ordered_ids(user_input.get("priority_order", ""), selected)
-            default_context_id = user_input.get("default_context_id")
-            config.default_context_id = None if default_context_id == NONE_VALUE else default_context_id
+            selected_ids = [_id_from_entity(entity_id) for entity_id in selected]
+            config.person_priority = [item for item in config.person_priority if item in selected_ids]
+            config.person_priority.extend(item for item in selected_ids if item not in config.person_priority)
+            if config.default_context_id not in selected_ids:
+                config.default_context_id = None
             return self._save(config)
 
         return self.async_show_form(
@@ -119,26 +146,52 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                             mode=selector.SelectSelectorMode.DROPDOWN,
                         )
                     ),
-                    vol.Optional(
-                        "priority_order",
-                        default=", ".join(config.person_priority),
-                    ): str,
-                    vol.Optional(
-                        "default_context_id",
-                        default=config.default_context_id or NONE_VALUE,
-                    ): selector.SelectSelector(
-                        selector.SelectSelectorConfig(options=default_context_options)
-                    ),
-                    vol.Optional(
-                        "fallback_trackers",
-                        default=_format_tracker_mapping(config.people),
-                    ): str,
                 }
             ),
             description_placeholders={
-                "fallback_help": "Fallback format: david=device_tracker.david_phone; scarlett=device_tracker.scarlett_phone",
-                "tracker_count": str(len(discovered_trackers)),
+                "person_count": str(len(discovered_people)),
             },
+        )
+
+    async def async_step_priority(self, user_input: dict[str, Any] | None = None):
+        """Configure active-context priority."""
+
+        config = self._config()
+        person_options = [selector.SelectOptionDict(value=NONE_VALUE, label="None")]
+        person_options.extend(
+            selector.SelectOptionDict(value=person.id, label=person.name)
+            for person in config.people
+        )
+
+        if user_input is not None:
+            ranked = []
+            for field in PRIORITY_FIELDS:
+                person_id = user_input.get(field)
+                if person_id and person_id != NONE_VALUE and person_id not in ranked:
+                    ranked.append(person_id)
+            ranked.extend(person.id for person in config.people if person.id not in ranked)
+            config.person_priority = ranked
+            default_context_id = user_input.get("default_context_id")
+            config.default_context_id = None if default_context_id == NONE_VALUE else default_context_id
+            return self._save(config)
+
+        fields = {
+            vol.Optional(
+                field,
+                default=(config.person_priority[index] if index < len(config.person_priority) else NONE_VALUE),
+            ): selector.SelectSelector(selector.SelectSelectorConfig(options=person_options))
+            for index, field in enumerate(PRIORITY_FIELDS[: max(1, min(len(config.people), len(PRIORITY_FIELDS)))])
+        }
+        fields[
+            vol.Optional(
+                "default_context_id",
+                default=config.default_context_id or NONE_VALUE,
+            )
+        ] = selector.SelectSelector(selector.SelectSelectorConfig(options=person_options))
+
+        return self.async_show_form(
+            step_id="priority",
+            data_schema=vol.Schema(fields),
         )
 
     async def async_step_zones(self, user_input: dict[str, Any] | None = None):
@@ -146,18 +199,23 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
 
         config = self._config()
         discovered_zones = discover_media_players(self.hass.states.async_all())
-        zone_options = _options(discovered_zones)
+        current_selected = {zone.entity_id for zone in config.zones if zone.selected}
+        recommended_zones = [
+            zone
+            for zone in discovered_zones
+            if is_recommended_media_player(zone) or zone.entity_id in current_selected
+        ]
+        zone_options = _options(recommended_zones)
         zones_by_entity = {zone.entity_id: zone for zone in config.zones}
 
         if user_input is not None:
             selected = set(user_input.get("selected_zones", []))
-            quiet_excluded = set(user_input.get("quiet_excluded_zones", []))
             config.zones = [
                 ZoneConfig(
                     entity_id=item.entity_id,
                     name=item.name,
                     selected=item.entity_id in selected,
-                    quiet_excluded=item.entity_id in quiet_excluded,
+                    quiet_excluded=zones_by_entity.get(item.entity_id, ZoneConfig(item.entity_id)).quiet_excluded,
                 )
                 for item in discovered_zones
             ]
@@ -177,22 +235,12 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                             mode=selector.SelectSelectorMode.DROPDOWN,
                         )
                     ),
-                    vol.Optional(
-                        "quiet_excluded_zones",
-                        default=[
-                            entity_id
-                            for entity_id, zone in zones_by_entity.items()
-                            if zone.quiet_excluded
-                        ],
-                    ): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=zone_options,
-                            multiple=True,
-                            mode=selector.SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
                 }
             ),
+            description_placeholders={
+                "recommended_count": str(len(recommended_zones)),
+                "total_count": str(len(discovered_zones)),
+            },
         )
 
     async def async_step_quiet(self, user_input: dict[str, Any] | None = None):
@@ -208,8 +256,8 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                 end=user_input["end"],
                 volume_multiplier=float(user_input["volume_multiplier"]),
                 excluded_zone_entity_ids=list(quiet.excluded_zone_entity_ids),
-                zone_start=user_input.get("zone_start") or None,
-                zone_end=user_input.get("zone_end") or None,
+                zone_start=quiet.zone_start,
+                zone_end=quiet.zone_end,
             )
             return self._save(config)
 
@@ -224,103 +272,105 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                         "volume_multiplier",
                         default=quiet.volume_multiplier,
                     ): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=1.0)),
-                    vol.Optional("zone_start", default=quiet.zone_start or ""): str,
-                    vol.Optional("zone_end", default=quiet.zone_end or ""): str,
                 }
             ),
         )
 
     async def async_step_events(self, user_input: dict[str, Any] | None = None):
-        """Configure event behavior and per-context voices."""
+        """Choose one event to configure."""
+
+        return self.async_show_menu(
+            step_id="events",
+            menu_options=[f"event_{event_id}" for event_id in DEFAULT_EVENTS],
+        )
+
+    async def async_step_event_front_door_approach(self, user_input: dict[str, Any] | None = None):
+        """Configure approach event."""
+
+        return await self._async_step_event_config("front_door_approach", user_input)
+
+    async def async_step_event_front_door_package(self, user_input: dict[str, Any] | None = None):
+        """Configure package event."""
+
+        return await self._async_step_event_config("front_door_package", user_input)
+
+    async def async_step_event_front_door_doorbell(self, user_input: dict[str, Any] | None = None):
+        """Configure doorbell event."""
+
+        return await self._async_step_event_config("front_door_doorbell", user_input)
+
+    async def _async_step_event_config(self, event_id: str, user_input: dict[str, Any] | None = None):
+        """Configure one event and its per-person voice selection."""
 
         config = self._config()
         events_by_id = {event.id: event for event in config.events}
         voice_options = _voice_options(config)
-        helper_options = [selector.SelectOptionDict(value=NONE_VALUE, label="None")]
-        helper_options.extend(_options(discover_helpers(self.hass.states.async_all())))
+        event = events_by_id[event_id]
+        step_id = f"event_{event_id}"
 
         if user_input is not None:
-            updated_events = []
-            for event_id in DEFAULT_EVENTS:
-                existing = events_by_id.get(
-                    event_id,
-                    EventConfig(id=event_id, name=event_id.replace("_", " ").title()),
+            voice_by_context = {}
+            for index, person in enumerate(config.people):
+                field = _voice_person_field(index)
+                selected_voice = user_input.get(field)
+                if selected_voice and selected_voice != NONE_VALUE:
+                    voice_by_context[person.id] = selected_voice
+            config.events = [
+                EventConfig(
+                    id=existing.id,
+                    name=existing.name,
+                    enabled=bool(user_input["enabled"]),
+                    voice_by_context=voice_by_context,
+                    default_voice_id=user_input.get("default_voice_id"),
+                    common_trigger_sound=existing.common_trigger_sound,
+                    trigger_sound_by_context=dict(existing.trigger_sound_by_context),
+                    bridge_helper_entity_id=existing.bridge_helper_entity_id,
+                    duplicate_window_seconds=existing.duplicate_window_seconds,
                 )
-                voice_by_context = {}
-                for person in config.people:
-                    field = _voice_field(event_id, person.id)
-                    selected_voice = user_input.get(field)
-                    if selected_voice and selected_voice != NONE_VALUE:
-                        voice_by_context[person.id] = selected_voice
-                bridge_helper = user_input.get(f"{event_id}_bridge_helper_entity_id")
-                updated_events.append(
-                    EventConfig(
-                        id=event_id,
-                        name=existing.name,
-                        enabled=bool(user_input[f"{event_id}_enabled"]),
-                        voice_by_context=voice_by_context,
-                        default_voice_id=user_input.get(f"{event_id}_default_voice_id"),
-                        common_trigger_sound=user_input.get(f"{event_id}_common_trigger_sound") or None,
-                        trigger_sound_by_context=dict(existing.trigger_sound_by_context),
-                        bridge_helper_entity_id=None if bridge_helper == NONE_VALUE else bridge_helper,
-                        duplicate_window_seconds=int(user_input[f"{event_id}_duplicate_window_seconds"]),
-                    )
-                )
-            config.events = updated_events
+                if existing.id == event_id
+                else existing
+                for existing in config.events
+            ]
             return self._save(config)
 
-        fields = {}
-        for event_id in DEFAULT_EVENTS:
-            event = events_by_id[event_id]
-            fields[vol.Optional(f"{event_id}_enabled", default=event.enabled)] = bool
+        fields = {
+            vol.Optional("enabled", default=event.enabled): bool,
+            vol.Optional(
+                "default_voice_id",
+                default=event.default_voice_id or "samantha",
+            ): selector.SelectSelector(selector.SelectSelectorConfig(options=voice_options)),
+        }
+        for index, person in enumerate(config.people):
             fields[
                 vol.Optional(
-                    f"{event_id}_default_voice_id",
-                    default=event.default_voice_id or "samantha",
+                    _voice_person_field(index),
+                    default=event.voice_by_context.get(person.id, NONE_VALUE),
                 )
-            ] = selector.SelectSelector(selector.SelectSelectorConfig(options=voice_options))
-            fields[
-                vol.Optional(
-                    f"{event_id}_common_trigger_sound",
-                    default=event.common_trigger_sound or "",
+            ] = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[selector.SelectOptionDict(value=NONE_VALUE, label="Use default voice")]
+                    + voice_options
                 )
-            ] = str
-            fields[
-                vol.Optional(
-                    f"{event_id}_bridge_helper_entity_id",
-                    default=event.bridge_helper_entity_id or NONE_VALUE,
-                )
-            ] = selector.SelectSelector(selector.SelectSelectorConfig(options=helper_options))
-            fields[
-                vol.Optional(
-                    f"{event_id}_duplicate_window_seconds",
-                    default=event.duplicate_window_seconds,
-                )
-            ] = vol.All(vol.Coerce(int), vol.Range(min=0, max=3600))
-            for person in config.people:
-                fields[
-                    vol.Optional(
-                        _voice_field(event_id, person.id),
-                        default=event.voice_by_context.get(person.id, NONE_VALUE),
-                    )
-                ] = selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=[selector.SelectOptionDict(value=NONE_VALUE, label="Default")]
-                        + voice_options
-                    )
-                )
+            )
 
         return self.async_show_form(
-            step_id="events",
+            step_id=step_id,
             data_schema=vol.Schema(fields),
+            description_placeholders={"event_name": _event_label(event_id)},
         )
 
-    async def async_step_voice_media(self, user_input: dict[str, Any] | None = None):
-        """Configure approved media paths for voices."""
+    async def async_step_media(self, user_input: dict[str, Any] | None = None):
+        """Configure approved media paths for events and voices."""
 
         config = self._config()
 
         if user_input is not None:
+            events_by_id = {event.id: event for event in config.events}
+            for event_id in DEFAULT_EVENTS:
+                event = events_by_id[event_id]
+                event.common_trigger_sound = _media_value(
+                    user_input.get(_trigger_sound_field(event_id))
+                )
             config.voices = [
                 VoicePersonality(
                     id=voice.id,
@@ -329,7 +379,7 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                     media_by_event={
                         event_id: media_path
                         for event_id in DEFAULT_EVENTS
-                        if (media_path := user_input.get(_media_field(voice.id, event_id)))
+                        if (media_path := _media_value(user_input.get(_media_field(voice.id, event_id))))
                     },
                 )
                 for voice in config.voices
@@ -337,17 +387,209 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
             return self._save(config)
 
         fields = {}
-        for voice in config.voices:
+        for event_id in DEFAULT_EVENTS:
+            event = next(event for event in config.events if event.id == event_id)
+            fields[
+                vol.Optional(
+                    _trigger_sound_field(event_id),
+                    default=_media_selector_default(event.common_trigger_sound),
+                )
+            ] = _media_selector()
+        for event_id in DEFAULT_EVENTS:
+            for voice in config.voices:
+                fields[
+                    vol.Optional(
+                        _media_field(voice.id, event_id),
+                        default=_media_selector_default(voice.media_by_event.get(event_id)),
+                    )
+                ] = _media_selector()
+        return self.async_show_form(
+            step_id="media",
+            data_schema=vol.Schema(fields),
+        )
+
+    async def async_step_voice_media(self, user_input: dict[str, Any] | None = None):
+        """Compatibility alias for older options links/tests."""
+
+        return await self.async_step_media(user_input)
+
+    async def async_step_advanced(self, user_input: dict[str, Any] | None = None):
+        """Configure advanced helpers, fallbacks, and raw overrides."""
+
+        config = self._config()
+        helper_options = [selector.SelectOptionDict(value=NONE_VALUE, label="None")]
+        helper_options.extend(_options(discover_helpers(self.hass.states.async_all()), include_entity_id=True))
+        tracker_options = _options(discover_device_trackers(self.hass.states.async_all()), include_entity_id=True)
+        zone_options = _options(discover_media_players(self.hass.states.async_all()), include_entity_id=True)
+        events_by_id = {event.id: event for event in config.events}
+
+        if user_input is not None:
+            for person in config.people:
+                person.fallback_tracker_entity_ids = _list_value(
+                    user_input.get(_fallback_trackers_field(person.id))
+                )
+            if "selected_zones_all" in user_input:
+                selected = set(user_input.get("selected_zones_all", []))
+                current_zones_by_entity = {zone.entity_id: zone for zone in config.zones}
+                config.zones = [
+                    ZoneConfig(
+                        entity_id=item.entity_id,
+                        name=item.name,
+                        selected=item.entity_id in selected,
+                        quiet_excluded=current_zones_by_entity.get(
+                            item.entity_id,
+                            ZoneConfig(item.entity_id),
+                        ).quiet_excluded,
+                    )
+                    for item in discover_media_players(self.hass.states.async_all())
+                ]
+            quiet = config.quiet
+            config.quiet = QuietConfig(
+                enabled=quiet.enabled,
+                start=quiet.start,
+                end=quiet.end,
+                volume_multiplier=quiet.volume_multiplier,
+                excluded_zone_entity_ids=list(user_input.get("quiet_excluded_zones", [])),
+                zone_start=user_input.get("zone_start") or None,
+                zone_end=user_input.get("zone_end") or None,
+            )
+            for zone in config.zones:
+                zone.quiet_excluded = zone.entity_id in config.quiet.excluded_zone_entity_ids
             for event_id in DEFAULT_EVENTS:
+                event = events_by_id[event_id]
+                if _trigger_sound_field(event_id) in user_input:
+                    event.common_trigger_sound = _media_value(user_input.get(_trigger_sound_field(event_id)))
+                bridge_helper = user_input.get(_bridge_helper_field(event_id))
+                event.bridge_helper_entity_id = None if bridge_helper == NONE_VALUE else bridge_helper
+                event.duplicate_window_seconds = int(user_input[_duplicate_window_field(event_id)])
+                for person in config.people:
+                    value = _media_value(user_input.get(_trigger_sound_context_field(event_id, person.id)))
+                    if value:
+                        event.trigger_sound_by_context[person.id] = value
+                    else:
+                        event.trigger_sound_by_context.pop(person.id, None)
+            for voice in config.voices:
+                for event_id in DEFAULT_EVENTS:
+                    field = _media_field(voice.id, event_id)
+                    if field in user_input:
+                        value = _media_value(user_input.get(field))
+                        if value:
+                            voice.media_by_event[event_id] = value
+                        else:
+                            voice.media_by_event.pop(event_id, None)
+            return self._save(config)
+
+        fields = {}
+        for person in config.people:
+            fields[
+                vol.Optional(
+                    _fallback_trackers_field(person.id),
+                    default=list(person.fallback_tracker_entity_ids),
+                )
+            ] = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=tracker_options,
+                    multiple=True,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            )
+        fields[
+            vol.Optional(
+                "selected_zones_all",
+                default=[zone.entity_id for zone in config.zones if zone.selected],
+            )
+        ] = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=zone_options,
+                multiple=True,
+                mode=selector.SelectSelectorMode.DROPDOWN,
+            )
+        )
+        fields[
+            vol.Optional(
+                "quiet_excluded_zones",
+                default=list(config.quiet.excluded_zone_entity_ids),
+            )
+        ] = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=zone_options,
+                multiple=True,
+                mode=selector.SelectSelectorMode.DROPDOWN,
+            )
+        )
+        fields[vol.Optional("zone_start", default=config.quiet.zone_start or "")] = str
+        fields[vol.Optional("zone_end", default=config.quiet.zone_end or "")] = str
+        for event_id in DEFAULT_EVENTS:
+            event = events_by_id[event_id]
+            fields[vol.Optional(_trigger_sound_field(event_id), default=event.common_trigger_sound or "")] = str
+            fields[
+                vol.Optional(
+                    _bridge_helper_field(event_id),
+                    default=event.bridge_helper_entity_id or NONE_VALUE,
+                )
+            ] = selector.SelectSelector(selector.SelectSelectorConfig(options=helper_options))
+            fields[
+                vol.Optional(
+                    _duplicate_window_field(event_id),
+                    default=event.duplicate_window_seconds,
+                )
+            ] = vol.All(vol.Coerce(int), vol.Range(min=0, max=3600))
+            for person in config.people:
+                fields[
+                    vol.Optional(
+                        _trigger_sound_context_field(event_id, person.id),
+                        default=_media_selector_default(
+                            event.trigger_sound_by_context.get(person.id)
+                        ),
+                    )
+                ] = _media_selector()
+            for voice in config.voices:
                 fields[
                     vol.Optional(
                         _media_field(voice.id, event_id),
                         default=voice.media_by_event.get(event_id, ""),
                     )
                 ] = str
+
         return self.async_show_form(
-            step_id="voice_media",
+            step_id="advanced",
             data_schema=vol.Schema(fields),
+        )
+
+    async def async_step_review(self, user_input: dict[str, Any] | None = None):
+        """Show a non-audible setup review."""
+
+        config = self._config()
+        if user_input is not None:
+            return self._save(config)
+
+        states = {state.entity_id: state.state for state in self.hass.states.async_all()}
+        summaries = []
+        for event_id in DEFAULT_EVENTS:
+            resolution = resolve_announcement(
+                config,
+                event_id,
+                ResolverRuntime(states=states, available_media=None),
+            )
+            status = "ready" if resolution.ok else "needs setup"
+            detail = ", ".join(resolution.errors or resolution.warnings or ["ok"])
+            summaries.append(f"{_event_label(event_id)}: {status} ({detail})")
+        services = getattr(self.hass, "services", None)
+        has_music_assistant = True
+        if services is not None and hasattr(services, "has_service"):
+            has_music_assistant = services.has_service("music_assistant", "play_announcement")
+        service_summary = (
+            "Music Assistant announcement service is available."
+            if has_music_assistant
+            else "Music Assistant announcement service was not found."
+        )
+        return self.async_show_form(
+            step_id="review",
+            data_schema=vol.Schema({}),
+            description_placeholders={
+                "summary": "\n".join(summaries),
+                "music_assistant": service_summary,
+            },
         )
 
     def _config(self) -> AnnouncementConfig:
@@ -362,9 +604,12 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         return self.async_create_entry(title="", data={CONF_ACTIVE_CONFIG: migrated})
 
 
-def _options(records) -> list[selector.SelectOptionDict]:
+def _options(records, *, include_entity_id: bool = False) -> list[selector.SelectOptionDict]:
     return [
-        selector.SelectOptionDict(value=record.entity_id, label=f"{record.name} ({record.entity_id})")
+        selector.SelectOptionDict(
+            value=record.entity_id,
+            label=f"{record.name} ({record.entity_id})" if include_entity_id else record.name,
+        )
         for record in records
     ]
 
@@ -380,37 +625,67 @@ def _id_from_entity(entity_id: str) -> str:
     return entity_id.split(".", 1)[-1]
 
 
-def _ordered_ids(priority_order: str, selected_entity_ids: list[str]) -> list[str]:
-    selected_ids = [_id_from_entity(entity_id) for entity_id in selected_entity_ids]
-    typed = [item.strip() for item in priority_order.split(",") if item.strip()]
-    ordered = [item for item in typed if item in selected_ids]
-    ordered.extend(item for item in selected_ids if item not in ordered)
-    return ordered
-
-
-def _parse_mapping(value: str) -> dict[str, list[str]]:
-    mapping: dict[str, list[str]] = {}
-    for segment in value.split(";"):
-        if "=" not in segment:
-            continue
-        person_id, tracker_values = segment.split("=", 1)
-        mapping[person_id.strip()] = [
-            tracker.strip() for tracker in tracker_values.split(",") if tracker.strip()
-        ]
-    return mapping
-
-
-def _format_tracker_mapping(people: list[PersonConfig]) -> str:
-    return "; ".join(
-        f"{person.id}={','.join(person.fallback_tracker_entity_ids)}"
-        for person in people
-        if person.fallback_tracker_entity_ids
-    )
-
-
 def _voice_field(event_id: str, person_id: str) -> str:
     return f"{event_id}_{person_id}_voice_id"
 
 
+def _voice_person_field(index: int) -> str:
+    return f"person_voice_{index + 1}"
+
+
 def _media_field(voice_id: str, event_id: str) -> str:
     return f"{voice_id}_{event_id}_media_path"
+
+
+def _trigger_sound_field(event_id: str) -> str:
+    return f"{event_id}_common_trigger_sound"
+
+
+def _trigger_sound_context_field(event_id: str, person_id: str) -> str:
+    return f"{event_id}_{person_id}_trigger_sound"
+
+
+def _fallback_trackers_field(person_id: str) -> str:
+    return f"{person_id}_fallback_trackers"
+
+
+def _bridge_helper_field(event_id: str) -> str:
+    return f"{event_id}_bridge_helper_entity_id"
+
+
+def _duplicate_window_field(event_id: str) -> str:
+    return f"{event_id}_duplicate_window_seconds"
+
+
+def _event_label(event_id: str) -> str:
+    return EVENT_LABELS.get(event_id, event_id.replace("_", " ").title())
+
+
+def _media_selector():
+    config_cls = getattr(selector, "MediaSelectorConfig", None)
+    selector_cls = getattr(selector, "MediaSelector", None)
+    if config_cls and selector_cls:
+        return selector_cls(config_cls(accept=["audio/*"]))
+    return str
+
+
+def _media_selector_default(value: str | None) -> dict[str, str]:
+    if not value:
+        return {}
+    return {"media_content_id": value, "media_content_type": "audio/mpeg"}
+
+
+def _media_value(value: Any) -> str:
+    if isinstance(value, dict):
+        return str(value.get("media_content_id") or "")
+    return str(value or "")
+
+
+def _list_value(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value if item]
+    if isinstance(value, str):
+        return [value] if value else []
+    return list(value)

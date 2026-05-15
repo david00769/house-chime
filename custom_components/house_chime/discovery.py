@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 
@@ -13,6 +13,7 @@ class DiscoveredEntity:
     entity_id: str
     name: str
     state: str | None = None
+    attributes: dict[str, Any] = field(default_factory=dict, repr=False, compare=False)
 
     def to_dict(self) -> dict[str, str | None]:
         return {"entity_id": self.entity_id, "name": self.name, "state": self.state}
@@ -33,7 +34,33 @@ def discover_device_trackers(states: Iterable[Any]) -> list[DiscoveredEntity]:
 def discover_media_players(states: Iterable[Any]) -> list[DiscoveredEntity]:
     """Return media-player candidates for Music Assistant/Juke selection."""
 
-    return _discover_domain(states, "media_player")
+    return sorted(
+        (_record(state) for state in states if _entity_id(state).startswith("media_player.")),
+        key=_media_player_sort_key,
+    )
+
+
+def is_recommended_media_player(record: DiscoveredEntity) -> bool:
+    """Return true for likely Music Assistant/Juke announcement targets."""
+
+    haystack = " ".join(
+        [
+            record.entity_id,
+            record.name,
+            " ".join(str(key) for key in record.attributes),
+            " ".join(str(value) for value in record.attributes.values()),
+        ]
+    ).lower()
+    return any(
+        token in haystack
+        for token in (
+            "music assistant",
+            "music_assistant",
+            "mass",
+            "juke",
+            "announcement",
+        )
+    )
 
 
 def discover_helpers(states: Iterable[Any]) -> list[DiscoveredEntity]:
@@ -56,8 +83,17 @@ def _record(state: Any) -> DiscoveredEntity:
     entity_id = _entity_id(state)
     attributes = getattr(state, "attributes", {}) or {}
     name = attributes.get("friendly_name") or entity_id
-    return DiscoveredEntity(entity_id=entity_id, name=str(name), state=getattr(state, "state", None))
+    return DiscoveredEntity(
+        entity_id=entity_id,
+        name=str(name),
+        state=getattr(state, "state", None),
+        attributes=dict(attributes),
+    )
 
 
 def _entity_id(state: Any) -> str:
     return str(getattr(state, "entity_id", ""))
+
+
+def _media_player_sort_key(record: DiscoveredEntity) -> tuple[int, str]:
+    return (0 if is_recommended_media_player(record) else 1, record.entity_id)

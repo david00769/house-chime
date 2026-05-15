@@ -77,6 +77,20 @@ def _install_homeassistant_stubs() -> None:
         def __init__(self, config: SelectSelectorConfig) -> None:
             self.config = config
 
+        def __call__(self, value: Any) -> Any:
+            return value
+
+    class MediaSelectorConfig:
+        def __init__(self, **kwargs: Any) -> None:
+            self.kwargs = kwargs
+
+    class MediaSelector:
+        def __init__(self, config: MediaSelectorConfig | None = None) -> None:
+            self.config = config
+
+        def __call__(self, value: Any) -> Any:
+            return value
+
     config_entries.ConfigFlow = ConfigFlow
     config_entries.OptionsFlow = OptionsFlow
     const.CONF_NAME = "name"
@@ -84,6 +98,8 @@ def _install_homeassistant_stubs() -> None:
     selector.SelectSelectorMode = SelectSelectorMode
     selector.SelectSelectorConfig = SelectSelectorConfig
     selector.SelectSelector = SelectSelector
+    selector.MediaSelectorConfig = MediaSelectorConfig
+    selector.MediaSelector = MediaSelector
     helpers.selector = selector
     homeassistant.config_entries = config_entries
     homeassistant.const = const
@@ -104,10 +120,14 @@ class FakeState:
     entity_id: str
     state: str
     name: str | None = None
+    extra_attributes: dict[str, Any] | None = None
 
     @property
     def attributes(self) -> dict[str, Any]:
-        return {"friendly_name": self.name} if self.name else {}
+        attributes = dict(self.extra_attributes or {})
+        if self.name:
+            attributes["friendly_name"] = self.name
+        return attributes
 
 
 class FakeStates:
