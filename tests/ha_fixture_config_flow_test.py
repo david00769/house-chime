@@ -57,6 +57,19 @@ def test_options_flow_people_step_uses_discovered_people_fixture() -> None:
     ]
 
 
+def test_options_flow_does_not_assign_home_assistant_config_entry_property() -> None:
+    class FlowWithReadOnlyConfigEntry(HouseChimeOptionsFlow):
+        @property
+        def config_entry(self):
+            return SimpleNamespace(data={}, options={})
+
+    entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: AnnouncementConfig().to_dict()}, options={})
+
+    flow = FlowWithReadOnlyConfigEntry(entry)
+
+    assert flow._config().to_dict()["version"] == 1
+
+
 def test_options_flow_voice_media_step_persists_local_media_paths() -> None:
     config = AnnouncementConfig()
     entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: config.to_dict()}, options={})
