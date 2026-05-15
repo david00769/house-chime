@@ -1,0 +1,64 @@
+title: House Chime
+views:
+  - title: Announcements
+    path: house-chime
+    icon: mdi:speaker-message
+    cards:
+      - type: entities
+        title: Runtime Status
+        entities:
+          - entity: binary_sensor.house_chime_integration_ready
+            name: Integration ready
+          - entity: sensor.house_chime_active_household_context
+            name: Active context
+          - entity: binary_sensor.house_chime_quiet_mode_active
+            name: Quiet mode
+          - entity: binary_sensor.house_chime_last_resolution_valid
+            name: Last resolution valid
+          - entity: sensor.house_chime_last_failure_reason
+            name: Last failure
+
+      - type: entities
+        title: Playback Plan
+        entities:
+          - entity: sensor.house_chime_last_resolved_event
+            name: Last resolved
+          - entity: sensor.house_chime_last_played_event
+            name: Last played
+          - entity: sensor.house_chime_last_media_path
+            name: Last media
+          - entity: sensor.house_chime_selected_target_zones
+            name: Selected zones
+          - entity: binary_sensor.house_chime_package_bridge_helper_active
+            name: Package event pending
+
+      - type: grid
+        title: Resolve Dry Runs
+        columns: 3
+        square: false
+        cards:
+          - type: button
+            name: Resolve Approach
+            icon: mdi:file-search
+            tap_action:
+              action: call-service
+              service: house_chime.resolve
+              data:
+                event_id: front_door_approach
+          - type: button
+            name: Resolve Package
+            icon: mdi:file-search
+            tap_action:
+              action: call-service
+              service: house_chime.resolve
+              data:
+                event_id: front_door_package
+          - type: button
+            name: Resolve Doorbell
+            icon: mdi:file-search
+            tap_action:
+              action: call-service
+              service: house_chime.resolve
+              data:
+                event_id: front_door_doorbell
+

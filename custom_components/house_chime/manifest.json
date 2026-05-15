@@ -1,0 +1,14 @@
+{
+  "domain": "house_chime",
+  "name": "House Chime",
+  "codeowners": ["@david00769"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/david00769/house-chime",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/david00769/house-chime/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.1.0"
+}
