@@ -26,6 +26,10 @@
       "title": "Music Assistant announcement service is missing",
       "description": "House Chime requires `music_assistant.play_announcement` for playback. Install or enable Music Assistant before using House Chime playback services. Error: `{error}`"
     },
+    "playback_url_signing_failed": {
+      "title": "Announcement audio URL could not be signed",
+      "description": "House Chime could not create the temporary signed Home Assistant Local Media URL needed for `{event_id}`. Update House Chime and Home Assistant, then try again. Error: `{error}`"
+    },
     "playback_url_unreachable": {
       "title": "Announcement audio URL is not reachable",
       "description": "House Chime resolved `{event_id}`, but the playback URL could not be fetched before sending it to Music Assistant. Check that the media file is in Home Assistant Local Media and that House Chime is up to date. Error: `{error}`"

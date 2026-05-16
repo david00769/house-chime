@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 import logging
 from typing import Any
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
@@ -84,16 +85,32 @@ async def _playback_url(hass: Any, media_path: str) -> str:
 async def _signed_path(hass: Any, path: str) -> str:
     """Return a short-lived signed HA path when running inside Home Assistant."""
 
+    if signer := getattr(hass, "async_sign_path", None):
+        return await signer(path)
+
     try:
         from homeassistant.components.http.auth import async_sign_path
-
-        try:
-            return async_sign_path(hass, path, expires=300)
-        except TypeError:
-            return async_sign_path(hass, path, 300)
     except Exception:
-        _LOGGER.debug("Falling back to unsigned media path", exc_info=True)
+        _LOGGER.debug("Home Assistant path signing helper is unavailable", exc_info=True)
         return path
+
+    expiration = timedelta(seconds=300)
+    try:
+        return async_sign_path(
+            hass,
+            path,
+            expiration,
+            use_content_user=True,
+        )
+    except TypeError:
+        try:
+            return async_sign_path(hass, path, expiration)
+        except TypeError as err:
+            _LOGGER.warning("Home Assistant path signing helper rejected supported signatures")
+            raise PlaybackMediaError(f"playback_url_signing_failed:{type(err).__name__}") from err
+    except Exception as err:
+        _LOGGER.warning("Home Assistant path signing failed", exc_info=True)
+        raise PlaybackMediaError(f"playback_url_signing_failed:{type(err).__name__}") from err
 
 
 async def _assert_playback_url_reachable(hass: Any, url: str, label: str) -> None:
