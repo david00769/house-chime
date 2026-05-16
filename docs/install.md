@@ -59,7 +59,9 @@ button appears to do nothing, check the House Chime diagnostic entities first:
 
 Then check `Settings -> Repairs` for House Chime issues. URL signing failures,
 unreachable Local Media URLs, missing media, missing zones, and a missing Music
-Assistant service are intended to show there.
+Assistant service are intended to show there. Incompatible speaker selections
+also show there. For Music Assistant playback, select media players that support
+Music Assistant announcements rather than Juke-native zone/control entities.
 
 After a Home Assistant restart, House Chime should load automatically. If it
 shows `not_loaded`, use `Settings -> Devices & services -> House Chime ->

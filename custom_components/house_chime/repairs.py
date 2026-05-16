@@ -27,6 +27,8 @@ def _actionable_errors(resolution: AnnouncementResolution) -> list[tuple[str, st
             actionable.append(("no_target_zones", error))
         elif error.startswith("missing_music_assistant_service:"):
             actionable.append(("missing_music_assistant_service", error))
+        elif error.startswith("incompatible_playback_targets:"):
+            actionable.append(("incompatible_playback_targets", error))
         elif error.startswith("playback_url_signing_failed:"):
             actionable.append(("playback_url_signing_failed", error))
         elif error.startswith("playback_url_unreachable:"):

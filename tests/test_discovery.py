@@ -7,15 +7,22 @@ from custom_components.house_chime.discovery import (
     discover_helpers,
     discover_media_players,
     discover_people,
+    is_music_assistant_announcement_player,
     is_recommended_media_player,
 )
 
 
 class State:
-    def __init__(self, entity_id: str, state: str, name: str | None = None) -> None:
+    def __init__(
+        self,
+        entity_id: str,
+        state: str,
+        name: str | None = None,
+        attributes: dict | None = None,
+    ) -> None:
         self.entity_id = entity_id
         self.state = state
-        self.attributes = {}
+        self.attributes = dict(attributes or {})
         if name:
             self.attributes["friendly_name"] = name
 
@@ -44,17 +51,32 @@ class DiscoveryTest(unittest.TestCase):
             ["input_boolean.google_package_arrived"],
         )
 
-    def test_ranks_likely_music_assistant_or_juke_players_first(self) -> None:
+    def test_ranks_music_assistant_announcement_players_first(self) -> None:
         states = [
             State("media_player.tv", "idle", "TV"),
-            State("media_player.juke_great_room", "idle", "Great Room"),
+            State("media_player.juke_great_room", "idle", "Juke Great Room"),
+            State(
+                "media_player.great_room",
+                "idle",
+                "Great Room",
+                {"supported_features": 512 | 1048576},
+            ),
         ]
 
         players = discover_media_players(states)
 
-        self.assertEqual([item.entity_id for item in players], ["media_player.juke_great_room", "media_player.tv"])
+        self.assertEqual(
+            [item.entity_id for item in players],
+            [
+                "media_player.great_room",
+                "media_player.juke_great_room",
+                "media_player.tv",
+            ],
+        )
         self.assertTrue(is_recommended_media_player(players[0]))
+        self.assertTrue(is_music_assistant_announcement_player(players[0]))
         self.assertFalse(is_recommended_media_player(players[1]))
+        self.assertFalse(is_recommended_media_player(players[2]))
 
 
 if __name__ == "__main__":
