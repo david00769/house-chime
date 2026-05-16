@@ -45,6 +45,11 @@ House Chime signs the selected Local Media URL at playback time before sending
 it to Music Assistant. Keep using the normal HA Media upload flow; you do not
 need to expose files manually under `/local`.
 
+Before handoff, House Chime probes the playback URL. If Home Assistant would
+reject the URL or the file cannot be fetched, the play service records a clear
+failure and creates a Repair issue instead of reporting the announcement as
+played.
+
 ## No-Audio Smoke Test
 
 Use these services before live playback:

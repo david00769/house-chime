@@ -41,6 +41,16 @@ def status_entity_name(description: StatusEntityDescription) -> str:
     return f"House Chime {description.name}"
 
 
+def status_native_value(key: str, value: Any) -> Any:
+    """Return a HA-safe sensor state value for a status key."""
+
+    if key == "selected_target_zones" and isinstance(value, list):
+        return f"{len(value)} speakers selected"
+    if isinstance(value, list):
+        return ", ".join(value)
+    return value
+
+
 def initial_status(config: AnnouncementConfig) -> dict[str, Any]:
     """Return initial status for a loaded integration entry."""
 
