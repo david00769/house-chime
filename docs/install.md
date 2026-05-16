@@ -50,6 +50,22 @@ reject the URL or the file cannot be fetched, the play service records a clear
 failure and creates a Repair issue instead of reporting the announcement as
 played.
 
+Stock Lovelace buttons do not show service response bodies. When a manual play
+button appears to do nothing, check the House Chime diagnostic entities first:
+
+- `Last failure reason`
+- `Last failed event`
+- `Last resolution valid`
+
+Then check `Settings -> Repairs` for House Chime issues. URL signing failures,
+unreachable Local Media URLs, missing media, missing zones, and a missing Music
+Assistant service are intended to show there.
+
+After a Home Assistant restart, House Chime should load automatically. If it
+shows `not_loaded`, use `Settings -> Devices & services -> House Chime ->
+Reload`, then check Home Assistant logs and Repairs. A manual reload should be a
+temporary recovery step, not the normal operating model.
+
 ## No-Audio Smoke Test
 
 Use these services before live playback:
