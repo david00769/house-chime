@@ -63,6 +63,16 @@ class StatusTest(unittest.TestCase):
             "2 speakers selected",
         )
 
+    def test_long_failure_reason_uses_short_state(self) -> None:
+        value = "incompatible_playback_targets:" + ",".join(
+            f"media_player.zone_{index}:missing_play_media" for index in range(20)
+        )
+
+        self.assertEqual(
+            status_native_value("last_failure_reason", value),
+            "incompatible_playback_targets (see details)",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
