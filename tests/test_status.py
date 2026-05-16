@@ -8,6 +8,7 @@ from custom_components.house_chime.status import (
     initial_status,
     record_resolution,
     status_entity_name,
+    status_native_value,
 )
 
 
@@ -52,6 +53,15 @@ class StatusTest(unittest.TestCase):
         self.assertEqual(status["last_failed_event"], "front_door_package")
         self.assertEqual(status["last_failure_reason"], "missing_media_asset:test.mp3")
         self.assertFalse(status["last_resolution_valid"])
+
+    def test_selected_target_zones_uses_short_state(self) -> None:
+        self.assertEqual(
+            status_native_value(
+                "selected_target_zones",
+                ["media_player.great_room", "media_player.bedroom"],
+            ),
+            "2 speakers selected",
+        )
 
 
 if __name__ == "__main__":

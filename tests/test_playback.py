@@ -3,7 +3,10 @@ from __future__ import annotations
 import unittest
 
 from custom_components.house_chime.models import AnnouncementResolution
-from custom_components.house_chime.playback import play_music_assistant_announcement
+from custom_components.house_chime.playback import (
+    PlaybackMediaError,
+    play_music_assistant_announcement,
+)
 
 
 class FakeState:
@@ -58,6 +61,10 @@ class FakeHass:
         self.states = FakeStates()
         self.services = FakeServices(self.states)
         self.config = type("Config", (), {"internal_url": "http://ha.local:8123"})()
+        self.probe_status = 200
+
+    async def async_probe_playback_url(self, url: str) -> int:
+        return self.probe_status
 
 
 class FakeSignPathHass(FakeHass):
@@ -151,6 +158,26 @@ class PlaybackTest(unittest.IsolatedAsyncioTestCase):
             music_call[2]["url"],
             "http://ha.local:8123/media/local/announcements/voice.mp3?authSig=test-signature&expires=300",
         )
+
+    async def test_playback_fails_before_music_assistant_when_url_is_unreachable(self) -> None:
+        hass = FakeHass()
+        hass.probe_status = 401
+        resolution = AnnouncementResolution(
+            event_id="front_door_doorbell",
+            ok=True,
+            media_path="media-source://media_source/local/announcements/voice.mp3",
+            target_player_entity_ids=["media_player.great_room"],
+            volume_level=0.5,
+        )
+
+        with self.assertRaises(PlaybackMediaError) as err:
+            await play_music_assistant_announcement(hass, resolution)
+
+        self.assertIn("playback_url_unreachable:media:http_401", str(err.exception))
+        music_calls = [
+            call for call in hass.services.calls if call[0] == "music_assistant"
+        ]
+        self.assertEqual(music_calls, [])
 
 
 if __name__ == "__main__":

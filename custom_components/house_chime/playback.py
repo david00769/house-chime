@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import logging
 from typing import Any
-from urllib.parse import quote, unquote
+from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 from .media import LOCAL_MEDIA_PREFIX
 from .models import AnnouncementResolution
@@ -21,6 +21,10 @@ class PlayerSnapshot:
     state: str | None
     volume_level: float | None
     source: str | None
+
+
+class PlaybackMediaError(Exception):
+    """Raised when a resolved media URL cannot be fetched by a server-side player."""
 
 
 async def play_music_assistant_announcement(hass: Any, resolution: AnnouncementResolution) -> list[str]:
@@ -45,6 +49,10 @@ async def play_music_assistant_announcement(hass: Any, resolution: AnnouncementR
             hass,
             resolution.trigger_sound_path,
         )
+
+    await _assert_playback_url_reachable(hass, service_data["url"], "media")
+    if pre_announce_url := service_data.get("pre_announce_url"):
+        await _assert_playback_url_reachable(hass, pre_announce_url, "pre_announce")
 
     warnings: list[str] = []
     try:
@@ -83,6 +91,42 @@ async def _signed_path(hass: Any, path: str) -> str:
     except Exception:
         _LOGGER.debug("Falling back to unsigned media path", exc_info=True)
         return path
+
+
+async def _assert_playback_url_reachable(hass: Any, url: str, label: str) -> None:
+    """Verify Music Assistant can fetch the URL shape before handoff."""
+
+    status = await _probe_playback_url(hass, url)
+    if status is None or 200 <= status < 400:
+        return
+    raise PlaybackMediaError(
+        f"playback_url_unreachable:{label}:http_{status}:{_redact_url(url)}"
+    )
+
+
+async def _probe_playback_url(hass: Any, url: str) -> int | None:
+    """Return HTTP status for a small unauthenticated media probe."""
+
+    if probe := getattr(hass, "async_probe_playback_url", None):
+        return await probe(url)
+
+    try:
+        from homeassistant.helpers.aiohttp_client import async_get_clientsession
+    except Exception:
+        return None
+
+    session = async_get_clientsession(hass)
+    try:
+        async with session.get(url, headers={"Range": "bytes=0-0"}) as response:
+            return response.status
+    except Exception:
+        _LOGGER.debug("Playback URL probe failed for %s", _redact_url(url), exc_info=True)
+        return 0
+
+
+def _redact_url(url: str) -> str:
+    split = urlsplit(url)
+    return urlunsplit((split.scheme, split.netloc, split.path, "", ""))
 
 
 def _ha_base_url(hass: Any) -> str:
