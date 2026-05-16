@@ -25,12 +25,12 @@ class FakeStates:
             "media_player.great_room": FakeState(
                 "media_player.great_room",
                 "playing",
-                {"volume_level": 0.3, "source": "AirPlay"},
+                {"volume_level": 0.3, "source": "AirPlay", "supported_features": 512 | 1048576},
             ),
             "media_player.bedroom": FakeState(
                 "media_player.bedroom",
                 "idle",
-                {"volume_level": 0.2, "source": "Juke"},
+                {"volume_level": 0.2, "source": "Juke", "supported_features": 512 | 1048576},
             ),
         }
 
@@ -219,6 +219,29 @@ class PlaybackTest(unittest.IsolatedAsyncioTestCase):
             await play_music_assistant_announcement(hass, resolution)
 
         self.assertIn("playback_url_unreachable:media:http_401", str(err.exception))
+        music_calls = [
+            call for call in hass.services.calls if call[0] == "music_assistant"
+        ]
+        self.assertEqual(music_calls, [])
+
+    async def test_playback_fails_before_music_assistant_for_incompatible_targets(self) -> None:
+        hass = FakeHass()
+        hass.states._states["media_player.great_room"].attributes["supported_features"] = 2052
+        resolution = AnnouncementResolution(
+            event_id="front_door_doorbell",
+            ok=True,
+            media_path="media-source://media_source/local/announcements/voice.mp3",
+            target_player_entity_ids=["media_player.great_room"],
+            volume_level=0.5,
+        )
+
+        with self.assertRaises(PlaybackMediaError) as err:
+            await play_music_assistant_announcement(hass, resolution)
+
+        self.assertIn(
+            "incompatible_playback_targets:media_player.great_room:missing_play_media",
+            str(err.exception),
+        )
         music_calls = [
             call for call in hass.services.calls if call[0] == "music_assistant"
         ]

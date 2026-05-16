@@ -13,6 +13,10 @@ from .models import AnnouncementResolution
 
 _LOGGER = logging.getLogger(__name__)
 
+PLAY_MEDIA_FEATURE = 512
+ANNOUNCE_FEATURE = 1048576
+UNAVAILABLE_STATES = {"unavailable", "unknown"}
+
 
 @dataclass(frozen=True, slots=True)
 class PlayerSnapshot:
@@ -37,6 +41,15 @@ async def play_music_assistant_announcement(hass: Any, resolution: AnnouncementR
 
     if not resolution.ok or not resolution.media_path:
         raise ValueError(f"Cannot play unresolved announcement: {resolution.to_dict()}")
+
+    incompatible_targets = _incompatible_music_assistant_targets(
+        hass,
+        resolution.target_player_entity_ids,
+    )
+    if incompatible_targets:
+        raise PlaybackMediaError(
+            "incompatible_playback_targets:" + ",".join(incompatible_targets)
+        )
 
     snapshots = [_snapshot_player(hass, entity_id) for entity_id in resolution.target_player_entity_ids]
 
@@ -159,6 +172,25 @@ def _ha_base_url(hass: Any) -> str:
         api = getattr(config, "api", None)
         base_url = getattr(api, "base_url", None) or getattr(config, "internal_url", None)
         return str(base_url or "").rstrip("/")
+
+
+def _incompatible_music_assistant_targets(hass: Any, entity_ids: list[str]) -> list[str]:
+    incompatible: list[str] = []
+    for entity_id in entity_ids:
+        state = hass.states.get(entity_id)
+        if state is None:
+            incompatible.append(f"{entity_id}:missing")
+            continue
+        if state.state in UNAVAILABLE_STATES:
+            incompatible.append(f"{entity_id}:{state.state}")
+            continue
+        supported_features = int((state.attributes or {}).get("supported_features") or 0)
+        if not supported_features & PLAY_MEDIA_FEATURE:
+            incompatible.append(f"{entity_id}:missing_play_media")
+            continue
+        if not supported_features & ANNOUNCE_FEATURE:
+            incompatible.append(f"{entity_id}:missing_announce")
+    return incompatible
 
 
 def _snapshot_player(hass: Any, entity_id: str) -> PlayerSnapshot:
