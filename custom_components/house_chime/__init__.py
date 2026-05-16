@@ -33,7 +33,7 @@ from .discovery import (
 )
 from .media import async_available_media_for_resolution
 from .models import AnnouncementConfig, ResolverRuntime
-from .playback import play_music_assistant_announcement
+from .playback import PlaybackMediaError, play_music_assistant_announcement
 from .repairs import async_create_resolution_issues
 from .resolver import resolve_announcement
 from .status import initial_status, record_resolution
@@ -149,7 +149,22 @@ def _register_services(hass: HomeAssistant) -> None:
             await async_create_resolution_issues(hass, resolution)
             hass.bus.async_fire(f"{DOMAIN}_play_failed", resolution.to_dict())
             return resolution.to_dict()
-        warnings = await play_music_assistant_announcement(hass, resolution)
+        try:
+            warnings = await play_music_assistant_announcement(hass, resolution)
+        except PlaybackMediaError as err:
+            resolution.ok = False
+            resolution.errors.append(str(err))
+            _record_and_publish_status(hass, data, resolution, outcome="failed")
+            await async_create_resolution_issues(hass, resolution)
+            hass.bus.async_fire(f"{DOMAIN}_play_failed", resolution.to_dict())
+            return resolution.to_dict()
+        except Exception as err:
+            resolution.ok = False
+            resolution.errors.append(f"music_assistant_playback_failed:{type(err).__name__}")
+            _record_and_publish_status(hass, data, resolution, outcome="failed")
+            await async_create_resolution_issues(hass, resolution)
+            hass.bus.async_fire(f"{DOMAIN}_play_failed", resolution.to_dict())
+            return resolution.to_dict()
         resolution.warnings.extend(warnings)
         data["last_triggered_by_event"][resolution.event_id] = datetime.now().isoformat()
         _record_and_publish_status(hass, data, resolution, outcome="played")
@@ -172,7 +187,22 @@ def _register_services(hass: HomeAssistant) -> None:
             await async_create_resolution_issues(hass, resolution)
             hass.bus.async_fire(f"{DOMAIN}_bridge_failed", resolution.to_dict())
             return resolution.to_dict()
-        warnings = await play_music_assistant_announcement(hass, resolution)
+        try:
+            warnings = await play_music_assistant_announcement(hass, resolution)
+        except PlaybackMediaError as err:
+            resolution.ok = False
+            resolution.errors.append(str(err))
+            _record_and_publish_status(hass, data, resolution, outcome="failed")
+            await async_create_resolution_issues(hass, resolution)
+            hass.bus.async_fire(f"{DOMAIN}_bridge_failed", resolution.to_dict())
+            return resolution.to_dict()
+        except Exception as err:
+            resolution.ok = False
+            resolution.errors.append(f"music_assistant_playback_failed:{type(err).__name__}")
+            _record_and_publish_status(hass, data, resolution, outcome="failed")
+            await async_create_resolution_issues(hass, resolution)
+            hass.bus.async_fire(f"{DOMAIN}_bridge_failed", resolution.to_dict())
+            return resolution.to_dict()
         resolution.warnings.extend(warnings)
         data["last_triggered_by_event"][resolution.event_id] = datetime.now().isoformat()
         if resolution.bridge_helper_entity_id:

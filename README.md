@@ -84,6 +84,10 @@ into short-lived signed URLs before calling Music Assistant. This lets
 server-side players fetch the audio without requiring operators to make the
 media folder public.
 
+House Chime also probes the signed playback URL before calling Music Assistant.
+If the URL is not reachable, playback is stopped and the dashboard diagnostics
+show a failure instead of recording a false success.
+
 ## Events
 
 The initial public events are:

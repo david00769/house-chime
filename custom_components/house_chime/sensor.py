@@ -10,7 +10,12 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import DOMAIN, SIGNAL_STATUS_UPDATED
-from .status import SENSOR_DESCRIPTIONS, StatusEntityDescription, status_entity_name
+from .status import (
+    SENSOR_DESCRIPTIONS,
+    StatusEntityDescription,
+    status_entity_name,
+    status_native_value,
+)
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities) -> None:
@@ -42,10 +47,10 @@ class HouseChimeStatusSensor(SensorEntity):
 
     @property
     def native_value(self) -> Any:
-        value = self._status.get(self.description.key)
-        if isinstance(value, list):
-            return ", ".join(value)
-        return value
+        return status_native_value(
+            self.description.key,
+            self._status.get(self.description.key),
+        )
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

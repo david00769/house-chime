@@ -27,6 +27,8 @@ def _actionable_errors(resolution: AnnouncementResolution) -> list[tuple[str, st
             actionable.append(("no_target_zones", error))
         elif error.startswith("missing_music_assistant_service:"):
             actionable.append(("missing_music_assistant_service", error))
+        elif error.startswith("playback_url_unreachable:"):
+            actionable.append(("playback_url_unreachable", error))
     return actionable
 
 
@@ -49,4 +51,3 @@ async def _async_create_issue(hass: Any, event_id: str, issue_type: str, error: 
             "error": error,
         },
     )
-
