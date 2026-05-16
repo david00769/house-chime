@@ -43,6 +43,9 @@ def discover_media_players(states: Iterable[Any]) -> list[DiscoveredEntity]:
 def is_recommended_media_player(record: DiscoveredEntity) -> bool:
     """Return true for likely Music Assistant/Juke announcement targets."""
 
+    if is_music_assistant_announcement_player(record):
+        return True
+
     haystack = " ".join(
         [
             record.entity_id,
@@ -57,10 +60,16 @@ def is_recommended_media_player(record: DiscoveredEntity) -> bool:
             "music assistant",
             "music_assistant",
             "mass",
-            "juke",
             "announcement",
         )
     )
+
+
+def is_music_assistant_announcement_player(record: DiscoveredEntity) -> bool:
+    """Return true when the player satisfies Music Assistant announcement target features."""
+
+    supported_features = int(record.attributes.get("supported_features") or 0)
+    return bool(supported_features & 512 and supported_features & 1048576)
 
 
 def discover_helpers(states: Iterable[Any]) -> list[DiscoveredEntity]:

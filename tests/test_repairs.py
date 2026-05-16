@@ -16,6 +16,7 @@ class RepairsTest(unittest.TestCase):
                 "missing_trigger_sound_asset:media-source://media_source/local/announcements/chime.mp3",
                 "no_target_zones",
                 "missing_music_assistant_service:music_assistant.play_announcement",
+                "incompatible_playback_targets:media_player.juke_zone:missing_announce",
                 "playback_url_signing_failed:AttributeError",
                 "event_disabled:front_door_package",
             ],
@@ -36,6 +37,10 @@ class RepairsTest(unittest.TestCase):
                 (
                     "missing_music_assistant_service",
                     "missing_music_assistant_service:music_assistant.play_announcement",
+                ),
+                (
+                    "incompatible_playback_targets",
+                    "incompatible_playback_targets:media_player.juke_zone:missing_announce",
                 ),
                 (
                     "playback_url_signing_failed",

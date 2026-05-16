@@ -93,6 +93,10 @@ Assistant `Settings -> Repairs`. Stock Lovelace buttons do not display service
 response bodies, so House Chime reports friendly operator warnings through its
 diagnostic entities and Repair issues instead of relying on a button pop-up.
 URL signing/auth failures are reported before Music Assistant is called.
+Selected speakers are also checked before handoff. If a Juke-native control
+entity or other media player cannot accept `music_assistant.play_announcement`,
+House Chime records an incompatible-target failure instead of reporting a false
+success.
 
 ## Events
 

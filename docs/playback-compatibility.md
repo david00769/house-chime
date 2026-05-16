@@ -9,6 +9,13 @@ only then calls Music Assistant. If signing or probing fails, playback is
 stopped and the failure is exposed through House Chime diagnostics and Home
 Assistant Repairs.
 
+House Chime also checks the selected speaker targets before the Music Assistant
+handoff. The targets must be media players that support Music Assistant
+announcements. Juke-native zone/control entities can still be useful for the
+broader audio system, but they are not valid targets for
+`music_assistant.play_announcement` unless Music Assistant exposes them with the
+announcement features.
+
 ## Tested
 
 - Juke Audio through Music Assistant
