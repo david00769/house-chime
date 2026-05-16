@@ -79,6 +79,11 @@ paths where Home Assistant's media selector is not available. Example:
 media-source://media_source/local/announcements/front-door.mp3
 ```
 
+At playback time, House Chime converts selected Home Assistant Local Media paths
+into short-lived signed URLs before calling Music Assistant. This lets
+server-side players fetch the audio without requiring operators to make the
+media folder public.
+
 ## Events
 
 The initial public events are:

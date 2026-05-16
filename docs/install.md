@@ -41,6 +41,10 @@ raw paths such as:
 media-source://media_source/local/announcements/front-door.mp3
 ```
 
+House Chime signs the selected Local Media URL at playback time before sending
+it to Music Assistant. Keep using the normal HA Media upload flow; you do not
+need to expose files manually under `/local`.
+
 ## No-Audio Smoke Test
 
 Use these services before live playback:
