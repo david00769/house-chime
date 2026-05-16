@@ -60,6 +60,11 @@ class FakeHass:
         self.config = type("Config", (), {"internal_url": "http://ha.local:8123"})()
 
 
+class FakeSignPathHass(FakeHass):
+    async def async_sign_path(self, path: str, expiration: int = 300) -> str:
+        return f"{path}?authSig=test-signature&expires={expiration}"
+
+
 class PlaybackTest(unittest.IsolatedAsyncioTestCase):
     async def test_playback_uses_simultaneous_targets_and_restores_volume(self) -> None:
         hass = FakeHass()
@@ -114,6 +119,37 @@ class PlaybackTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             music_call[2]["pre_announce_url"],
             "http://ha.local:8123/media/local/announcements/doorbell.mp3",
+        )
+
+    async def test_playback_uses_signed_paths_when_home_assistant_supports_them(self) -> None:
+        from custom_components.house_chime import playback
+
+        original_signed_path = playback._signed_path
+
+        async def fake_signed_path(hass, path):
+            return await hass.async_sign_path(path)
+
+        playback._signed_path = fake_signed_path
+        try:
+            hass = FakeSignPathHass()
+            resolution = AnnouncementResolution(
+                event_id="front_door_doorbell",
+                ok=True,
+                media_path="media-source://media_source/local/announcements/voice.mp3",
+                target_player_entity_ids=["media_player.great_room"],
+                volume_level=0.5,
+            )
+
+            await play_music_assistant_announcement(hass, resolution)
+        finally:
+            playback._signed_path = original_signed_path
+
+        music_call = [
+            call for call in hass.services.calls if call[0] == "music_assistant"
+        ][0]
+        self.assertEqual(
+            music_call[2]["url"],
+            "http://ha.local:8123/media/local/announcements/voice.mp3?authSig=test-signature&expires=300",
         )
 
 

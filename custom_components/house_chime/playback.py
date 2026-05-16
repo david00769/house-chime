@@ -36,12 +36,15 @@ async def play_music_assistant_announcement(hass: Any, resolution: AnnouncementR
     snapshots = [_snapshot_player(hass, entity_id) for entity_id in resolution.target_player_entity_ids]
 
     service_data = {
-        "url": _playback_url(hass, resolution.media_path),
+        "url": await _playback_url(hass, resolution.media_path),
         "announce_volume": int(round(resolution.volume_level * 100)),
     }
     if resolution.trigger_sound_path:
         service_data["use_pre_announce"] = True
-        service_data["pre_announce_url"] = _playback_url(hass, resolution.trigger_sound_path)
+        service_data["pre_announce_url"] = await _playback_url(
+            hass,
+            resolution.trigger_sound_path,
+        )
 
     warnings: list[str] = []
     try:
@@ -60,13 +63,26 @@ async def play_music_assistant_announcement(hass: Any, resolution: AnnouncementR
     return warnings
 
 
-def _playback_url(hass: Any, media_path: str) -> str:
+async def _playback_url(hass: Any, media_path: str) -> str:
     """Convert configured media into the URL shape Music Assistant expects."""
 
     if media_path.startswith(LOCAL_MEDIA_PREFIX):
         relative_path = unquote(media_path.removeprefix(LOCAL_MEDIA_PREFIX))
-        return f"{_ha_base_url(hass)}/media/local/{quote(relative_path, safe='/')}"
+        path = f"/media/local/{quote(relative_path, safe='/')}"
+        return f"{_ha_base_url(hass)}{await _signed_path(hass, path)}"
     return media_path
+
+
+async def _signed_path(hass: Any, path: str) -> str:
+    """Return a short-lived signed HA path when running inside Home Assistant."""
+
+    try:
+        from homeassistant.components.http.auth import async_sign_path
+
+        return async_sign_path(hass, path, expiration=300)
+    except Exception:
+        _LOGGER.debug("Falling back to unsigned media path", exc_info=True)
+        return path
 
 
 def _ha_base_url(hass: Any) -> str:
