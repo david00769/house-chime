@@ -88,6 +88,9 @@ House Chime also probes the signed playback URL before calling Music Assistant.
 If the URL is not reachable, playback is stopped and the dashboard diagnostics
 show a failure instead of recording a false success.
 
+If playback fails, check the `Last failure reason` diagnostic first. URL/auth
+failures are reported before Music Assistant is called.
+
 ## Events
 
 The initial public events are:

@@ -87,7 +87,10 @@ async def _signed_path(hass: Any, path: str) -> str:
     try:
         from homeassistant.components.http.auth import async_sign_path
 
-        return async_sign_path(hass, path, expiration=300)
+        try:
+            return async_sign_path(hass, path, expires=300)
+        except TypeError:
+            return async_sign_path(hass, path, 300)
     except Exception:
         _LOGGER.debug("Falling back to unsigned media path", exc_info=True)
         return path
