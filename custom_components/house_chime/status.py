@@ -46,6 +46,8 @@ def status_native_value(key: str, value: Any) -> Any:
 
     if key == "selected_target_zones" and isinstance(value, list):
         return f"{len(value)} speakers selected"
+    if key == "last_failure_reason" and isinstance(value, str) and len(value) > 255:
+        return f"{value.split(':', 1)[0]} (see details)"
     if isinstance(value, list):
         return ", ".join(value)
     return value
