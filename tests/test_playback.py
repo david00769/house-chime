@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import sys
+from datetime import timedelta
+from types import ModuleType
 import unittest
 
 from custom_components.house_chime.models import AnnouncementResolution
@@ -158,6 +161,48 @@ class PlaybackTest(unittest.IsolatedAsyncioTestCase):
             music_call[2]["url"],
             "http://ha.local:8123/media/local/announcements/voice.mp3?authSig=test-signature&expires=300",
         )
+
+    async def test_signing_helper_receives_timedelta_expiration(self) -> None:
+        from custom_components.house_chime import playback
+
+        module_names = [
+            "homeassistant",
+            "homeassistant.components",
+            "homeassistant.components.http",
+            "homeassistant.components.http.auth",
+        ]
+        originals = {name: sys.modules.get(name) for name in module_names}
+        calls = []
+
+        homeassistant = ModuleType("homeassistant")
+        components = ModuleType("homeassistant.components")
+        http = ModuleType("homeassistant.components.http")
+        auth = ModuleType("homeassistant.components.http.auth")
+
+        def fake_async_sign_path(hass, path, expiration, use_content_user=False):
+            calls.append((path, expiration, use_content_user))
+            return f"{path}?authSig=test-signature"
+
+        auth.async_sign_path = fake_async_sign_path
+        sys.modules.update(
+            {
+                "homeassistant": homeassistant,
+                "homeassistant.components": components,
+                "homeassistant.components.http": http,
+                "homeassistant.components.http.auth": auth,
+            }
+        )
+        try:
+            signed = await playback._signed_path(FakeHass(), "/media/local/test.mp3")
+        finally:
+            for name, original in originals.items():
+                if original is None:
+                    sys.modules.pop(name, None)
+                else:
+                    sys.modules[name] = original
+
+        self.assertEqual(signed, "/media/local/test.mp3?authSig=test-signature")
+        self.assertEqual(calls, [("/media/local/test.mp3", timedelta(seconds=300), True)])
 
     async def test_playback_fails_before_music_assistant_when_url_is_unreachable(self) -> None:
         hass = FakeHass()

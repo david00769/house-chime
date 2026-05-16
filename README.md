@@ -88,8 +88,11 @@ House Chime also probes the signed playback URL before calling Music Assistant.
 If the URL is not reachable, playback is stopped and the dashboard diagnostics
 show a failure instead of recording a false success.
 
-If playback fails, check the `Last failure reason` diagnostic first. URL/auth
-failures are reported before Music Assistant is called.
+If playback fails, check the `Last failure reason` diagnostic first, then Home
+Assistant `Settings -> Repairs`. Stock Lovelace buttons do not display service
+response bodies, so House Chime reports friendly operator warnings through its
+diagnostic entities and Repair issues instead of relying on a button pop-up.
+URL signing/auth failures are reported before Music Assistant is called.
 
 ## Events
 
