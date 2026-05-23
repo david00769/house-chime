@@ -205,7 +205,11 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
             for zone in discovered_zones
             if is_recommended_media_player(zone) or zone.entity_id in current_selected
         ]
-        zone_options = _options(recommended_zones)
+        # IMPORTANT: The selector options must include *all* discovered players.
+        # Otherwise HA can drop/ignore a user's selection if it is not part of the
+        # option list (leading to "0 speakers selected" even when the UI appeared
+        # to have a chip selected).
+        zone_options = _options(discovered_zones)
         zones_by_entity = {zone.entity_id: zone for zone in config.zones}
 
         if user_input is not None:

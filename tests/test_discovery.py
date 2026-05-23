@@ -68,8 +68,8 @@ class DiscoveryTest(unittest.TestCase):
         self.assertEqual(
             [item.entity_id for item in players],
             [
-                "media_player.great_room",
                 "media_player.juke_great_room",
+                "media_player.great_room",
                 "media_player.tv",
             ],
         )

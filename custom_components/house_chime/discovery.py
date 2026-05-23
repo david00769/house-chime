@@ -68,8 +68,21 @@ def is_recommended_media_player(record: DiscoveredEntity) -> bool:
 def is_music_assistant_announcement_player(record: DiscoveredEntity) -> bool:
     """Return true when the player satisfies Music Assistant announcement target features."""
 
-    supported_features = int(record.attributes.get("supported_features") or 0)
-    return bool(supported_features & 512 and supported_features & 1048576)
+    # Historically we used `supported_features` bitflags as a proxy for announcement
+    # capability. Music Assistant/Juke entities do not consistently expose these
+    # flags, so relying on them creates false negatives and a confusing options UI.
+    #
+    # Instead, treat Music Assistant/Juke-flavored entities as announcement-capable
+    # for recommendation purposes. Final compatibility checks happen at playback-time.
+    haystack = " ".join(
+        [
+            record.entity_id,
+            record.name,
+            " ".join(str(key) for key in record.attributes),
+            " ".join(str(value) for value in record.attributes.values()),
+        ]
+    ).lower()
+    return any(token in haystack for token in ("music assistant", "music_assistant", "mass", "juke"))
 
 
 def discover_helpers(states: Iterable[Any]) -> list[DiscoveredEntity]:
