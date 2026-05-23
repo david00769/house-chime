@@ -60,6 +60,16 @@ The setup flow is intentionally operator-focused:
 
 Diagnostics remain available, but they are not part of the default setup path.
 
+Do not add House Chime configuration links or `Configure speakers` tiles to an
+operator dashboard. Dashboards should show readiness, saved speaker status,
+dry-run actions, and intentional play actions. Setup belongs in Home Assistant
+`Settings -> Devices & services -> House Chime -> Configure`.
+
+`Selected target zones` reports the saved configured speaker list. It is not
+the same thing as the per-event resolved playback target list after quiet rules,
+duplicate suppression, unavailable speakers, or validation. Use the
+last-resolution diagnostic detail when troubleshooting a specific event.
+
 ## Media
 
 House Chime consumes approved playable files that already exist in Home
@@ -97,6 +107,9 @@ Selected speakers are also checked before handoff. If a Juke-native control
 entity or other media player cannot accept `music_assistant.play_announcement`,
 House Chime records an incompatible-target failure instead of reporting a false
 success.
+
+If the speaker selector shows several identical friendly names, use the entity
+ID suffix in the option label to distinguish the actual media players.
 
 ## Events
 

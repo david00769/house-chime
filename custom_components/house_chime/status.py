@@ -85,10 +85,10 @@ def record_resolution(
     if has_music_assistant is not None:
         status["integration_ready"] = bool(has_music_assistant)
     status["last_resolved_event"] = resolution.event_id
-    status["active_household_context"] = resolution.active_context_id
-    status["selected_target_zones"] = list(resolution.target_player_entity_ids)
-    status["last_media_path"] = resolution.media_path
-    status["quiet_mode_active"] = resolution.quiet_active
+    if not resolution.suppressed:
+        status["active_household_context"] = resolution.active_context_id
+        status["last_media_path"] = resolution.media_path
+        status["quiet_mode_active"] = resolution.quiet_active
     status["last_resolution_valid"] = resolution.ok
     status["last_resolution"] = resolution.to_dict()
 

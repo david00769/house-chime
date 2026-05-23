@@ -11,6 +11,12 @@ from custom_components.house_chime.models import AnnouncementConfig, PersonConfi
 from conftest import FakeState, make_fake_hass
 
 
+def make_options_flow(entry: SimpleNamespace) -> HouseChimeOptionsFlow:
+    flow = HouseChimeOptionsFlow()
+    flow.config_entry = entry
+    return flow
+
+
 def test_config_flow_creates_seeded_house_chime_entry() -> None:
     flow = HouseChimeConfigFlow()
 
@@ -30,7 +36,7 @@ def test_config_flow_creates_seeded_house_chime_entry() -> None:
 
 def test_options_flow_people_step_uses_discovered_people_fixture() -> None:
     entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: AnnouncementConfig().to_dict()}, options={})
-    flow = HouseChimeOptionsFlow(entry)
+    flow = make_options_flow(entry)
     flow.hass = make_fake_hass(
         [
             FakeState("person.david", "home", "David"),
@@ -62,7 +68,7 @@ def test_options_flow_priority_step_preserves_rank_fields() -> None:
         ]
     )
     entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: config.to_dict()}, options={})
-    flow = HouseChimeOptionsFlow(entry)
+    flow = make_options_flow(entry)
     flow.hass = make_fake_hass([])
 
     result = asyncio.run(
@@ -82,7 +88,7 @@ def test_options_flow_priority_step_preserves_rank_fields() -> None:
 
 def test_options_flow_init_uses_guided_setup_menu() -> None:
     entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: AnnouncementConfig().to_dict()}, options={})
-    flow = HouseChimeOptionsFlow(entry)
+    flow = make_options_flow(entry)
 
     result = asyncio.run(flow.async_step_init())
 
@@ -99,15 +105,24 @@ def test_options_flow_init_uses_guided_setup_menu() -> None:
     ]
 
 
+def test_config_flow_options_flow_uses_framework_config_entry_property() -> None:
+    entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: AnnouncementConfig().to_dict()}, options={})
+    flow = HouseChimeConfigFlow.async_get_options_flow(entry)
+    flow.config_entry = entry
+
+    result = asyncio.run(flow.async_step_init())
+
+    assert isinstance(flow, HouseChimeOptionsFlow)
+    assert result["type"] == "menu"
+
+
 def test_options_flow_does_not_assign_home_assistant_config_entry_property() -> None:
     class FlowWithReadOnlyConfigEntry(HouseChimeOptionsFlow):
         @property
         def config_entry(self):
             return SimpleNamespace(data={}, options={})
 
-    entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: AnnouncementConfig().to_dict()}, options={})
-
-    flow = FlowWithReadOnlyConfigEntry(entry)
+    flow = FlowWithReadOnlyConfigEntry()
 
     assert flow._config().to_dict()["version"] == 1
 
@@ -115,7 +130,7 @@ def test_options_flow_does_not_assign_home_assistant_config_entry_property() -> 
 def test_options_flow_media_step_persists_media_selector_paths() -> None:
     config = AnnouncementConfig()
     entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: config.to_dict()}, options={})
-    flow = HouseChimeOptionsFlow(entry)
+    flow = make_options_flow(entry)
     flow.hass = make_fake_hass([])
 
     result = asyncio.run(
@@ -165,7 +180,7 @@ def test_options_flow_event_step_configures_one_event_with_friendly_fields() -> 
         ]
     )
     entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: config.to_dict()}, options={})
-    flow = HouseChimeOptionsFlow(entry)
+    flow = make_options_flow(entry)
     flow.hass = make_fake_hass([])
 
     result = asyncio.run(
@@ -199,7 +214,7 @@ def test_options_flow_quiet_step_keeps_quiet_zone_rules_in_advanced() -> None:
     config.quiet.zone_start = "21:00"
     config.quiet.zone_end = "07:00"
     entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: config.to_dict()}, options={})
-    flow = HouseChimeOptionsFlow(entry)
+    flow = make_options_flow(entry)
     flow.hass = make_fake_hass([])
 
     result = asyncio.run(
@@ -221,7 +236,7 @@ def test_options_flow_quiet_step_keeps_quiet_zone_rules_in_advanced() -> None:
 
 def test_options_flow_zones_prioritizes_recommended_music_assistant_players() -> None:
     entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: AnnouncementConfig().to_dict()}, options={})
-    flow = HouseChimeOptionsFlow(entry)
+    flow = make_options_flow(entry)
     flow.hass = make_fake_hass(
         [
             FakeState("media_player.tv", "idle", "TV"),
@@ -245,9 +260,39 @@ def test_options_flow_zones_prioritizes_recommended_music_assistant_players() ->
     }
 
 
+def test_options_flow_zones_labels_include_entity_ids() -> None:
+    entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: AnnouncementConfig().to_dict()}, options={})
+    flow = make_options_flow(entry)
+    flow.hass = make_fake_hass(
+        [
+            FakeState(
+                "media_player.living_room_3",
+                "idle",
+                "Whole House",
+                {"mass_player_id": "living_room_3"},
+            ),
+            FakeState(
+                "media_player.whole_house",
+                "idle",
+                "Whole House",
+                {"mass_player_id": "whole_house"},
+            ),
+        ]
+    )
+
+    result = asyncio.run(flow.async_step_zones())
+    selected_field = next(iter(result["data_schema"].schema.values()))
+    options = selected_field.config.kwargs["options"]
+
+    assert [option["label"] for option in options] == [
+        "Whole House (media_player.living_room_3)",
+        "Whole House (media_player.whole_house)",
+    ]
+
+
 def test_options_flow_zones_keeps_full_media_player_list_in_advanced() -> None:
     entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: AnnouncementConfig().to_dict()}, options={})
-    flow = HouseChimeOptionsFlow(entry)
+    flow = make_options_flow(entry)
     flow.hass = make_fake_hass(
         [
             FakeState("media_player.tv", "idle", "TV"),
@@ -281,7 +326,7 @@ def test_options_flow_advanced_persists_fallbacks_bridge_and_personal_chime() ->
         zones=[ZoneConfig(entity_id="media_player.great_room", name="Great Room", selected=True)],
     )
     entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: config.to_dict()}, options={})
-    flow = HouseChimeOptionsFlow(entry)
+    flow = make_options_flow(entry)
     flow.hass = make_fake_hass(
         [
             FakeState("device_tracker.david_phone", "home", "David Phone"),
@@ -333,7 +378,7 @@ def test_options_flow_review_reports_non_audible_setup_status() -> None:
         person_priority=["david"],
     )
     entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: config.to_dict()}, options={})
-    flow = HouseChimeOptionsFlow(entry)
+    flow = make_options_flow(entry)
     flow.hass = make_fake_hass([FakeState("person.david", "home", "David")])
 
     result = asyncio.run(flow.async_step_review())

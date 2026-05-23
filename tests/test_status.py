@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from custom_components.house_chime.models import AnnouncementConfig, AnnouncementResolution
+from custom_components.house_chime.models import AnnouncementConfig, AnnouncementResolution, ZoneConfig
 from custom_components.house_chime.status import (
     SENSOR_DESCRIPTIONS,
     initial_status,
@@ -20,7 +20,12 @@ class StatusTest(unittest.TestCase):
         )
 
     def test_record_resolution_updates_lovelace_status_fields(self) -> None:
-        status = initial_status(AnnouncementConfig(default_context_id="david"))
+        status = initial_status(
+            AnnouncementConfig(
+                default_context_id="david",
+                zones=[],
+            )
+        )
         resolution = AnnouncementResolution(
             event_id="front_door_approach",
             ok=True,
@@ -35,10 +40,76 @@ class StatusTest(unittest.TestCase):
         self.assertEqual(status["last_resolved_event"], "front_door_approach")
         self.assertEqual(status["last_played_event"], "front_door_approach")
         self.assertEqual(status["active_household_context"], "david")
-        self.assertEqual(status["selected_target_zones"], ["media_player.great_room"])
         self.assertEqual(status["last_media_path"], "media-source://media_source/local/announcements/front-door.mp3")
         self.assertTrue(status["quiet_mode_active"])
         self.assertTrue(status["last_resolution_valid"])
+
+    def test_record_resolution_keeps_configured_selected_zones_stable(self) -> None:
+        config = AnnouncementConfig(
+            default_context_id="david",
+            zones=[ZoneConfig(entity_id="media_player.living_room_3", selected=True)],
+        )
+        status = initial_status(config)
+        resolution = AnnouncementResolution(
+            event_id="front_door_doorbell",
+            ok=False,
+            suppressed=True,
+            errors=["duplicate_suppressed:front_door_doorbell"],
+        )
+
+        record_resolution(status, resolution, outcome="failed")
+
+        self.assertEqual(status["selected_target_zones"], ["media_player.living_room_3"])
+        self.assertEqual(status["active_household_context"], "david")
+
+    def test_duplicate_suppression_preserves_last_operator_context(self) -> None:
+        status = initial_status(
+            AnnouncementConfig(
+                default_context_id="david",
+                zones=[
+                    ZoneConfig(entity_id="media_player.living_room_3", selected=True),
+                    ZoneConfig(entity_id="media_player.whole_house", selected=True),
+                ],
+            )
+        )
+        record_resolution(
+            status,
+            AnnouncementResolution(
+                event_id="front_door_doorbell",
+                ok=True,
+                active_context_id="david",
+                media_path="media-source://media_source/local/announcements/doorbell.mp3",
+                quiet_active=True,
+            ),
+            outcome="played",
+        )
+
+        record_resolution(
+            status,
+            AnnouncementResolution(
+                event_id="front_door_doorbell",
+                ok=False,
+                suppressed=True,
+                errors=["duplicate_suppressed:front_door_doorbell"],
+            ),
+            outcome="failed",
+        )
+
+        self.assertEqual(
+            status["selected_target_zones"],
+            ["media_player.living_room_3", "media_player.whole_house"],
+        )
+        self.assertEqual(status["active_household_context"], "david")
+        self.assertEqual(
+            status["last_media_path"],
+            "media-source://media_source/local/announcements/doorbell.mp3",
+        )
+        self.assertTrue(status["quiet_mode_active"])
+        self.assertFalse(status["last_resolution_valid"])
+        self.assertEqual(
+            status["last_failure_reason"],
+            "duplicate_suppressed:front_door_doorbell",
+        )
 
     def test_record_failure_updates_failure_fields(self) -> None:
         status = initial_status(AnnouncementConfig())

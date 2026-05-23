@@ -24,6 +24,11 @@ After adding the integration, open `Configure`. House Chime walks through:
   quiet-zone exclusions, and per-person chime overrides.
 - `Review / Dry Run`: check the setup without playing audio.
 
+Keep configuration entry points out of operator dashboards. A House Chime
+dashboard may show readiness, configured speaker status, dry-run buttons, and
+intentional audible test buttons, but `Configure speakers` tiles or direct
+configuration links belong in Devices & Services.
+
 ## Upload Media
 
 House Chime does not upload or generate audio files. Use Home Assistant's
@@ -62,6 +67,11 @@ unreachable Local Media URLs, missing media, missing zones, and a missing Music
 Assistant service are intended to show there. Incompatible speaker selections
 also show there. For Music Assistant playback, select media players that support
 Music Assistant announcements rather than Juke-native zone/control entities.
+
+`Selected target zones` is the saved configured speaker list. If an individual
+event is suppressed or resolves to no playable targets, inspect the
+last-resolution diagnostic detail instead of treating the configured speaker
+summary as the per-event target list.
 
 After a Home Assistant restart, House Chime should load automatically. If it
 shows `not_loaded`, use `Settings -> Devices & services -> House Chime ->

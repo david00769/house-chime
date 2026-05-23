@@ -8,6 +8,7 @@ import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.const import CONF_NAME
+from homeassistant.core import callback
 from homeassistant.helpers import selector
 
 from .const import CONF_ACTIVE_CONFIG, DEFAULT_EVENTS, DEFAULT_NAME, DOMAIN
@@ -81,17 +82,15 @@ class HouseChimeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     @staticmethod
+    @callback
     def async_get_options_flow(config_entry):
         """Return the options flow."""
 
-        return HouseChimeOptionsFlow(config_entry)
+        return HouseChimeOptionsFlow()
 
 
 class HouseChimeOptionsFlow(config_entries.OptionsFlow):
     """Options flow for the operator-managed runtime config."""
-
-    def __init__(self, config_entry) -> None:
-        self._config_entry = config_entry
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None):
         """Show the configuration menu."""
@@ -212,7 +211,7 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         #
         # We still include any *currently selected* non-recommended entities so a
         # user's saved configuration does not silently disappear from the UI.
-        zone_options = _options(recommended_zones)
+        zone_options = _options(recommended_zones, include_entity_id=True)
         zones_by_entity = {zone.entity_id: zone for zone in config.zones}
 
         if user_input is not None:
@@ -256,7 +255,7 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         config = self._config()
         discovered_zones = discover_media_players(self.hass.states.async_all())
         zones_by_entity = {zone.entity_id: zone for zone in config.zones}
-        zone_options = _options(discovered_zones)
+        zone_options = _options(discovered_zones, include_entity_id=True)
 
         if user_input is not None:
             selected = set(user_input.get("selected_zones", []))
@@ -644,7 +643,7 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         )
 
     def _config(self) -> AnnouncementConfig:
-        current_config = self._config_entry.options.get(CONF_ACTIVE_CONFIG) or self._config_entry.data.get(
+        current_config = self.config_entry.options.get(CONF_ACTIVE_CONFIG) or self.config_entry.data.get(
             CONF_ACTIVE_CONFIG
         )
         migrated, _ = migrate_config_dict(current_config)

@@ -9,7 +9,7 @@ views:
         content: |
           Use this page to check readiness, run silent dry runs, and manually test announcements.
 
-          Configure House Chime from **Settings → Devices & services → House Chime → Configure**.
+          Configuration belongs in Devices & Services, not on this operator dashboard.
 
       - type: entities
         title: Operator Status
