@@ -78,9 +78,12 @@ def record_resolution(
     *,
     outcome: str,
     helper_states: dict[str, str] | None = None,
+    has_music_assistant: bool | None = None,
 ) -> None:
     """Update runtime status after resolve/play/bridge actions."""
 
+    if has_music_assistant is not None:
+        status["integration_ready"] = bool(has_music_assistant)
     status["last_resolved_event"] = resolution.event_id
     status["active_household_context"] = resolution.active_context_id
     status["selected_target_zones"] = list(resolution.target_player_entity_ids)

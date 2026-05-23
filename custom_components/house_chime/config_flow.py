@@ -44,6 +44,7 @@ SETUP_MENU_OPTIONS = [
     "people",
     "priority",
     "zones",
+    "zones_all",
     "media",
     "events",
     "quiet",
@@ -195,7 +196,7 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         )
 
     async def async_step_zones(self, user_input: dict[str, Any] | None = None):
-        """Configure selected playback zones."""
+        """Configure selected playback zones (Juke/Music Assistant recommended list)."""
 
         config = self._config()
         discovered_zones = discover_media_players(self.hass.states.async_all())
@@ -245,6 +246,50 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
             ),
             description_placeholders={
                 "recommended_count": str(len(recommended_zones)),
+                "total_count": str(len(discovered_zones)),
+            },
+        )
+
+    async def async_step_zones_all(self, user_input: dict[str, Any] | None = None):
+        """Configure selected playback zones (full media_player list)."""
+
+        config = self._config()
+        discovered_zones = discover_media_players(self.hass.states.async_all())
+        zones_by_entity = {zone.entity_id: zone for zone in config.zones}
+        zone_options = _options(discovered_zones)
+
+        if user_input is not None:
+            selected = set(user_input.get("selected_zones", []))
+            config.zones = [
+                ZoneConfig(
+                    entity_id=item.entity_id,
+                    name=item.name,
+                    selected=item.entity_id in selected,
+                    quiet_excluded=zones_by_entity.get(item.entity_id, ZoneConfig(item.entity_id)).quiet_excluded,
+                )
+                for item in discovered_zones
+            ]
+            return self._save(config)
+
+        recommended_count = sum(1 for zone in discovered_zones if is_recommended_media_player(zone))
+        return self.async_show_form(
+            step_id="zones_all",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        "selected_zones",
+                        default=[zone.entity_id for zone in config.zones if zone.selected],
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=zone_options,
+                            multiple=True,
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                }
+            ),
+            description_placeholders={
+                "recommended_count": str(recommended_count),
                 "total_count": str(len(discovered_zones)),
             },
         )

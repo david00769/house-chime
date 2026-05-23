@@ -47,7 +47,8 @@
         "menu_options": {
           "people": "People",
           "priority": "Priority",
-          "zones": "Speakers",
+          "zones": "Speakers (Juke/Music Assistant)",
+          "zones_all": "Speakers (All media players)",
           "media": "Sounds",
           "events": "Events",
           "quiet": "Quiet rules",
@@ -83,6 +84,13 @@
       "zones": {
         "title": "Speakers",
         "description": "Select the speakers or Music Assistant players used for announcements. Recommended players shown: {recommended_count}. Total media players discovered: {total_count}. Advanced shows the full list when needed.",
+        "data": {
+          "selected_zones": "Announcement speakers"
+        }
+      },
+      "zones_all": {
+        "title": "Speakers (All media players)",
+        "description": "Select from all Home Assistant media_player entities. Recommended players shown: {recommended_count}. Total media players discovered: {total_count}.",
         "data": {
           "selected_zones": "Announcement speakers"
         }

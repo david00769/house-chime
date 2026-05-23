@@ -281,11 +281,13 @@ def _record_and_publish_status(
     outcome: str,
 ) -> None:
     helper_states = {state.entity_id: state.state for state in hass.states.async_all()}
+    has_music_assistant = hass.services.has_service("music_assistant", "play_announcement")
     record_resolution(
         data["status"],
         resolution,
         outcome=outcome,
         helper_states=helper_states,
+        has_music_assistant=has_music_assistant,
     )
     if async_dispatcher_send is not None:
         async_dispatcher_send(hass, SIGNAL_STATUS_UPDATED)

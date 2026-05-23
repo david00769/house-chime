@@ -90,6 +90,7 @@ def test_options_flow_init_uses_guided_setup_menu() -> None:
         "people",
         "priority",
         "zones",
+        "zones_all",
         "media",
         "events",
         "quiet",
