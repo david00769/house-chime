@@ -609,13 +609,17 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
 
 
 def _options(records, *, include_entity_id: bool = False) -> list[selector.SelectOptionDict]:
-    return [
-        selector.SelectOptionDict(
-            value=record.entity_id,
-            label=f"{record.name} ({record.entity_id})" if include_entity_id else record.name,
-        )
-        for record in records
-    ]
+    name_counts: dict[str, int] = {}
+    for record in records:
+        name_counts[record.name] = name_counts.get(record.name, 0) + 1
+
+    options: list[selector.SelectOptionDict] = []
+    for record in records:
+        label = record.name
+        if include_entity_id or name_counts.get(record.name, 0) > 1:
+            label = f"{record.name} ({record.entity_id})"
+        options.append(selector.SelectOptionDict(value=record.entity_id, label=label))
+    return options
 
 
 def _voice_options(config: AnnouncementConfig) -> list[selector.SelectOptionDict]:
