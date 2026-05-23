@@ -237,12 +237,7 @@ def test_options_flow_zones_prioritizes_recommended_music_assistant_players() ->
     selected_field = next(iter(result["data_schema"].schema.values()))
     options = selected_field.config.kwargs["options"]
 
-    # The zones step must include the full discovered list so user selections are not dropped,
-    # but recommended Music Assistant/Juke players should still sort to the top.
-    assert [option["value"] for option in options] == [
-        "media_player.great_room",
-        "media_player.tv",
-    ]
+    assert [option["value"] for option in options] == ["media_player.great_room"]
     assert result["description_placeholders"] == {
         "recommended_count": "1",
         "total_count": "2",
@@ -261,10 +256,7 @@ def test_options_flow_zones_keeps_full_media_player_list_in_advanced() -> None:
 
     zones_result = asyncio.run(flow.async_step_zones())
     zones_field = next(iter(zones_result["data_schema"].schema.values()))
-    assert [option["value"] for option in zones_field.config.kwargs["options"]] == [
-        "media_player.radio",
-        "media_player.tv",
-    ]
+    assert zones_field.config.kwargs["options"] == []
     assert zones_result["description_placeholders"] == {
         "recommended_count": "0",
         "total_count": "2",

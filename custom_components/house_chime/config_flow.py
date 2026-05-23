@@ -205,11 +205,13 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
             for zone in discovered_zones
             if is_recommended_media_player(zone) or zone.entity_id in current_selected
         ]
-        # IMPORTANT: The selector options must include *all* discovered players.
-        # Otherwise HA can drop/ignore a user's selection if it is not part of the
-        # option list (leading to "0 speakers selected" even when the UI appeared
-        # to have a chip selected).
-        zone_options = _options(discovered_zones)
+        # The default Speakers picker intentionally focuses on Music Assistant/Juke
+        # targets to avoid confusing users with unrelated media_player entities
+        # (TVs, receivers, stale AirPlay bridges, etc.).
+        #
+        # We still include any *currently selected* non-recommended entities so a
+        # user's saved configuration does not silently disappear from the UI.
+        zone_options = _options(recommended_zones)
         zones_by_entity = {zone.entity_id: zone for zone in config.zones}
 
         if user_input is not None:
