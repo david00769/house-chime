@@ -226,7 +226,7 @@ class PlaybackTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_playback_fails_before_music_assistant_for_incompatible_targets(self) -> None:
         hass = FakeHass()
-        hass.states._states["media_player.great_room"].attributes["supported_features"] = 2052
+        hass.states._states["media_player.great_room"].state = "unavailable"
         resolution = AnnouncementResolution(
             event_id="front_door_doorbell",
             ok=True,
@@ -239,7 +239,7 @@ class PlaybackTest(unittest.IsolatedAsyncioTestCase):
             await play_music_assistant_announcement(hass, resolution)
 
         self.assertIn(
-            "incompatible_playback_targets:media_player.great_room:missing_play_media",
+            "incompatible_playback_targets:media_player.great_room:unavailable",
             str(err.exception),
         )
         music_calls = [
