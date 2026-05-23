@@ -13,8 +13,6 @@ from .models import AnnouncementResolution
 
 _LOGGER = logging.getLogger(__name__)
 
-PLAY_MEDIA_FEATURE = 512
-ANNOUNCE_FEATURE = 1048576
 UNAVAILABLE_STATES = {"unavailable", "unknown"}
 
 
@@ -184,12 +182,6 @@ def _incompatible_music_assistant_targets(hass: Any, entity_ids: list[str]) -> l
         if state.state in UNAVAILABLE_STATES:
             incompatible.append(f"{entity_id}:{state.state}")
             continue
-        supported_features = int((state.attributes or {}).get("supported_features") or 0)
-        if not supported_features & PLAY_MEDIA_FEATURE:
-            incompatible.append(f"{entity_id}:missing_play_media")
-            continue
-        if not supported_features & ANNOUNCE_FEATURE:
-            incompatible.append(f"{entity_id}:missing_announce")
     return incompatible
 
 
