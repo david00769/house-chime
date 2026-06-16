@@ -97,23 +97,23 @@
       },
       "media": {
         "title": "Sounds",
-        "description": "Upload audio through Home Assistant Media / Local Media first, then select the announcement and chime sounds here.",
+        "description": "Upload audio through Home Assistant Media / Local Media first, then select event audio and optional pre-sounds here.",
         "data": {
-          "front_door_approach_common_trigger_sound": "Approach chime sound",
-          "front_door_package_common_trigger_sound": "Package chime sound",
-          "front_door_doorbell_common_trigger_sound": "Doorbell chime sound",
+          "front_door_approach_common_trigger_sound": "Approach pre-sound",
+          "front_door_package_common_trigger_sound": "Package pre-sound",
+          "front_door_doorbell_common_trigger_sound": "Doorbell pre-sound",
           "eve_front_door_approach_media_path": "Eve - Approach announcement",
           "eve_front_door_package_media_path": "Eve - Package announcement",
-          "eve_front_door_doorbell_media_path": "Eve - Doorbell announcement",
+          "eve_front_door_doorbell_media_path": "Eve - Doorbell button sound",
           "leo_front_door_approach_media_path": "Leo - Approach announcement",
           "leo_front_door_package_media_path": "Leo - Package announcement",
-          "leo_front_door_doorbell_media_path": "Leo - Doorbell announcement",
+          "leo_front_door_doorbell_media_path": "Leo - Doorbell button sound",
           "pierce_front_door_approach_media_path": "Pierce - Approach announcement",
           "pierce_front_door_package_media_path": "Pierce - Package announcement",
-          "pierce_front_door_doorbell_media_path": "Pierce - Doorbell announcement",
+          "pierce_front_door_doorbell_media_path": "Pierce - Doorbell button sound",
           "samantha_front_door_approach_media_path": "Samantha - Approach announcement",
           "samantha_front_door_package_media_path": "Samantha - Package announcement",
-          "samantha_front_door_doorbell_media_path": "Samantha - Doorbell announcement"
+          "samantha_front_door_doorbell_media_path": "Samantha - Doorbell button sound"
         }
       },
       "events": {
@@ -193,21 +193,21 @@
           "front_door_approach_duplicate_window_seconds": "Approach duplicate window",
           "front_door_package_duplicate_window_seconds": "Package duplicate window",
           "front_door_doorbell_duplicate_window_seconds": "Doorbell duplicate window",
-          "front_door_approach_common_trigger_sound": "Raw Approach chime path",
-          "front_door_package_common_trigger_sound": "Raw Package chime path",
-          "front_door_doorbell_common_trigger_sound": "Raw Doorbell chime path",
+          "front_door_approach_common_trigger_sound": "Raw Approach pre-sound path",
+          "front_door_package_common_trigger_sound": "Raw Package pre-sound path",
+          "front_door_doorbell_common_trigger_sound": "Raw Doorbell pre-sound path",
           "eve_front_door_approach_media_path": "Raw Eve - Approach announcement path",
           "eve_front_door_package_media_path": "Raw Eve - Package announcement path",
-          "eve_front_door_doorbell_media_path": "Raw Eve - Doorbell announcement path",
+          "eve_front_door_doorbell_media_path": "Raw Eve - Doorbell button sound path",
           "leo_front_door_approach_media_path": "Raw Leo - Approach announcement path",
           "leo_front_door_package_media_path": "Raw Leo - Package announcement path",
-          "leo_front_door_doorbell_media_path": "Raw Leo - Doorbell announcement path",
+          "leo_front_door_doorbell_media_path": "Raw Leo - Doorbell button sound path",
           "pierce_front_door_approach_media_path": "Raw Pierce - Approach announcement path",
           "pierce_front_door_package_media_path": "Raw Pierce - Package announcement path",
-          "pierce_front_door_doorbell_media_path": "Raw Pierce - Doorbell announcement path",
+          "pierce_front_door_doorbell_media_path": "Raw Pierce - Doorbell button sound path",
           "samantha_front_door_approach_media_path": "Raw Samantha - Approach announcement path",
           "samantha_front_door_package_media_path": "Raw Samantha - Package announcement path",
-          "samantha_front_door_doorbell_media_path": "Raw Samantha - Doorbell announcement path"
+          "samantha_front_door_doorbell_media_path": "Raw Samantha - Doorbell button sound path"
         }
       },
       "review": {
