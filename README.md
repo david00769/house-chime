@@ -111,6 +111,19 @@ success.
 If the speaker selector shows several identical friendly names, use the entity
 ID suffix in the option label to distinguish the actual media players.
 
+Music Assistant and Home Assistant can rename or recreate `media_player`
+entities after integration updates, device rediscovery, or restoring a backup.
+If House Chime reports a selected speaker as missing or incompatible, open
+`Settings -> Devices & services -> House Chime -> Configure -> Speakers` and
+reselect the current Music Assistant player. A successful dry run clears stale
+House Chime Repair issues for that event.
+
+When saved speakers are missing, the Speakers form lists the stale entity IDs
+and shows best-effort current matches by friendly name or entity ID. These are
+operator review hints only. House Chime does not automatically remap speakers
+because friendly names and areas are not unique enough to guarantee the intended
+playback target.
+
 ## Events
 
 The initial public events are:

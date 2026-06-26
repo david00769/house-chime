@@ -28,7 +28,7 @@
     },
     "incompatible_playback_targets": {
       "title": "Selected speakers cannot play Music Assistant announcements",
-      "description": "House Chime resolved `{event_id}`, but one or more selected speaker targets are not compatible with `music_assistant.play_announcement`. Choose Music Assistant announcement-capable media players in House Chime options. Error: `{error}`"
+      "description": "House Chime resolved `{event_id}`, but one or more selected speaker targets are missing or cannot use `music_assistant.play_announcement`. Music Assistant or Home Assistant may have recreated a `media_player` entity after an update, restore, or device rediscovery. Open House Chime options and reselect the current Music Assistant announcement-capable speakers. The issue clears after this event resolves cleanly. Error: `{error}`"
     },
     "playback_url_signing_failed": {
       "title": "Announcement audio URL could not be signed",
@@ -83,14 +83,14 @@
       },
       "zones": {
         "title": "Speakers",
-        "description": "Select the speakers or Music Assistant players used for announcements. Recommended players shown: {recommended_count}. Total media players discovered: {total_count}. Advanced shows the full list when needed.",
+        "description": "Select the speakers or Music Assistant players used for announcements. Recommended players shown: {recommended_count}. Total media players discovered: {total_count}. Advanced shows the full list when needed.\n\nMissing saved speakers:\n{missing_selected_zones}\n\nSuggested current matches, for review only:\n{suggested_replacements}\n\nHouse Chime does not automatically replace missing speaker entity IDs. Select the current speaker you want before saving.",
         "data": {
           "selected_zones": "Announcement speakers"
         }
       },
       "zones_all": {
         "title": "Speakers (All media players)",
-        "description": "Select from all Home Assistant media_player entities. Recommended players shown: {recommended_count}. Total media players discovered: {total_count}.",
+        "description": "Select from all Home Assistant media_player entities. Recommended players shown: {recommended_count}. Total media players discovered: {total_count}.\n\nMissing saved speakers:\n{missing_selected_zones}\n\nSuggested current matches, for review only:\n{suggested_replacements}\n\nHouse Chime does not automatically replace missing speaker entity IDs. Select the current speaker you want before saving.",
         "data": {
           "selected_zones": "Announcement speakers"
         }

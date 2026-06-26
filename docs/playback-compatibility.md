@@ -16,6 +16,17 @@ broader audio system, but they are not valid targets for
 `music_assistant.play_announcement` unless Music Assistant exposes them with the
 announcement features.
 
+Saved speaker selections are Home Assistant entity IDs. Music Assistant,
+Home Assistant, restore, or device rediscovery changes can retire an old
+`media_player` ID and create a replacement with the same friendly name. When
+that happens, House Chime fails before playback and creates a Repair instead of
+silently playing to only part of the configured target set. Reselect the current
+Music Assistant speaker in House Chime options, then run `house_chime.resolve`
+or `Review / Dry Run`; successful resolution clears stale event-level Repairs.
+The Speakers form may suggest current entities with similar names, but it does
+not auto-remap them. The operator must confirm the intended target by selecting
+it.
+
 ## Tested
 
 - Juke Audio through Music Assistant

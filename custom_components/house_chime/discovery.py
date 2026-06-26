@@ -57,9 +57,6 @@ def is_recommended_media_player(record: DiscoveredEntity) -> bool:
     return any(
         token in haystack
         for token in (
-            "music assistant",
-            "music_assistant",
-            "mass",
             "announcement",
         )
     )
@@ -68,12 +65,13 @@ def is_recommended_media_player(record: DiscoveredEntity) -> bool:
 def is_music_assistant_announcement_player(record: DiscoveredEntity) -> bool:
     """Return true when the player satisfies Music Assistant announcement target features."""
 
-    # Historically we used `supported_features` bitflags as a proxy for announcement
-    # capability. Music Assistant/Juke entities do not consistently expose these
-    # flags, so relying on them creates false negatives and a confusing options UI.
-    #
-    # Instead, treat Music Assistant/Juke-flavored entities as announcement-capable
-    # for recommendation purposes. Final compatibility checks happen at playback-time.
+    # Generic Music Assistant proxy players expose broad metadata such as
+    # `app_id=music_assistant`, `source=Music Assistant Queue`, and
+    # `mass_player_type=player`. That metadata alone is too broad for the
+    # curated picker, because it includes TVs, HomePods, computers, and stale
+    # AirPlay bridges. Keep this recommendation focused on explicit Juke or
+    # announcement-flavored targets; the full media-player picker remains
+    # available for recovery and unusual deployments.
     haystack = " ".join(
         [
             record.entity_id,
@@ -82,7 +80,7 @@ def is_music_assistant_announcement_player(record: DiscoveredEntity) -> bool:
             " ".join(str(value) for value in record.attributes.values()),
         ]
     ).lower()
-    return any(token in haystack for token in ("music assistant", "music_assistant", "mass", "juke"))
+    return any(token in haystack for token in ("juke", "announcement"))
 
 
 def discover_helpers(states: Iterable[Any]) -> list[DiscoveredEntity]:

@@ -200,6 +200,12 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         config = self._config()
         discovered_zones = discover_media_players(self.hass.states.async_all())
         current_selected = {zone.entity_id for zone in config.zones if zone.selected}
+        discovered_zone_ids = {zone.entity_id for zone in discovered_zones}
+        available_selected = [
+            zone.entity_id
+            for zone in config.zones
+            if zone.selected and zone.entity_id in discovered_zone_ids
+        ]
         recommended_zones = [
             zone
             for zone in discovered_zones
@@ -233,7 +239,7 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                 {
                     vol.Optional(
                         "selected_zones",
-                        default=[zone.entity_id for zone in config.zones if zone.selected],
+                        default=available_selected,
                     ): selector.SelectSelector(
                         selector.SelectSelectorConfig(
                             options=zone_options,
@@ -246,6 +252,7 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
             description_placeholders={
                 "recommended_count": str(len(recommended_zones)),
                 "total_count": str(len(discovered_zones)),
+                **_speaker_drift_placeholders(config, discovered_zones),
             },
         )
 
@@ -255,6 +262,12 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         config = self._config()
         discovered_zones = discover_media_players(self.hass.states.async_all())
         zones_by_entity = {zone.entity_id: zone for zone in config.zones}
+        discovered_zone_ids = {zone.entity_id for zone in discovered_zones}
+        available_selected = [
+            zone.entity_id
+            for zone in config.zones
+            if zone.selected and zone.entity_id in discovered_zone_ids
+        ]
         zone_options = _options(discovered_zones, include_entity_id=True)
 
         if user_input is not None:
@@ -277,7 +290,7 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                 {
                     vol.Optional(
                         "selected_zones",
-                        default=[zone.entity_id for zone in config.zones if zone.selected],
+                        default=available_selected,
                     ): selector.SelectSelector(
                         selector.SelectSelectorConfig(
                             options=zone_options,
@@ -290,6 +303,7 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
             description_placeholders={
                 "recommended_count": str(recommended_count),
                 "total_count": str(len(discovered_zones)),
+                **_speaker_drift_placeholders(config, discovered_zones),
             },
         )
 
@@ -666,6 +680,75 @@ def _options(records, *, include_entity_id: bool = False) -> list[selector.Selec
             label = f"{record.name} ({record.entity_id})"
         options.append(selector.SelectOptionDict(value=record.entity_id, label=label))
     return options
+
+
+def _speaker_drift_placeholders(config: AnnouncementConfig, discovered_zones) -> dict[str, str]:
+    missing = _missing_selected_zones(config, discovered_zones)
+    if not missing:
+        return {
+            "missing_selected_zones": "None.",
+            "suggested_replacements": "None.",
+        }
+
+    return {
+        "missing_selected_zones": "\n".join(
+            _zone_label(zone.entity_id, zone.name) for zone in missing
+        ),
+        "suggested_replacements": "\n".join(
+            _replacement_summary(zone, discovered_zones) for zone in missing
+        ),
+    }
+
+
+def _missing_selected_zones(config: AnnouncementConfig, discovered_zones) -> list[ZoneConfig]:
+    discovered_zone_ids = {zone.entity_id for zone in discovered_zones}
+    return [
+        zone
+        for zone in config.zones
+        if zone.selected and zone.entity_id not in discovered_zone_ids
+    ]
+
+
+def _replacement_summary(missing_zone: ZoneConfig, discovered_zones) -> str:
+    candidates = _suggest_replacement_zones(missing_zone, discovered_zones)
+    if not candidates:
+        return f"{_zone_label(missing_zone.entity_id, missing_zone.name)} -> no close match found"
+    return (
+        f"{_zone_label(missing_zone.entity_id, missing_zone.name)} -> "
+        + ", ".join(_zone_label(zone.entity_id, zone.name) for zone in candidates)
+    )
+
+
+def _suggest_replacement_zones(missing_zone: ZoneConfig, discovered_zones, limit: int = 3):
+    missing_name = _normalise_zone_name(missing_zone.name or _id_from_entity(missing_zone.entity_id))
+    missing_entity_name = _normalise_zone_name(_id_from_entity(missing_zone.entity_id))
+    scored = []
+    for zone in discovered_zones:
+        zone_name = _normalise_zone_name(zone.name)
+        zone_entity_name = _normalise_zone_name(_id_from_entity(zone.entity_id))
+        score = 0
+        if missing_name and zone_name == missing_name:
+            score = 3
+        elif missing_entity_name and zone_entity_name == missing_entity_name:
+            score = 2
+        elif missing_name and (
+            missing_name in zone_name
+            or zone_name in missing_name
+            or missing_entity_name in zone_name
+        ):
+            score = 1
+        if score:
+            scored.append((score, zone.entity_id, zone))
+    return [zone for _, _, zone in sorted(scored, key=lambda item: (-item[0], item[1]))[:limit]]
+
+
+def _normalise_zone_name(value: str | None) -> str:
+    return " ".join(str(value or "").replace("_", " ").replace("-", " ").lower().split())
+
+
+def _zone_label(entity_id: str, name: str | None) -> str:
+    label = name or entity_id
+    return f"{label} ({entity_id})"
 
 
 def _voice_options(config: AnnouncementConfig) -> list[selector.SelectOptionDict]:

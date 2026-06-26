@@ -53,13 +53,22 @@ class DiscoveryTest(unittest.TestCase):
 
     def test_ranks_music_assistant_announcement_players_first(self) -> None:
         states = [
-            State("media_player.tv", "idle", "TV"),
+            State(
+                "media_player.tv",
+                "idle",
+                "TV",
+                {
+                    "app_id": "music_assistant",
+                    "source": "Music Assistant Queue",
+                    "mass_player_type": "player",
+                },
+            ),
             State("media_player.juke_great_room", "idle", "Juke Great Room"),
             State(
                 "media_player.great_room",
                 "idle",
                 "Great Room",
-                {"supported_features": 512 | 1048576},
+                {"app_id": "music_assistant", "source": "Music Assistant Queue"},
             ),
         ]
 
@@ -77,6 +86,25 @@ class DiscoveryTest(unittest.TestCase):
         self.assertTrue(is_music_assistant_announcement_player(players[0]))
         self.assertFalse(is_recommended_media_player(players[1]))
         self.assertFalse(is_recommended_media_player(players[2]))
+
+    def test_generic_music_assistant_metadata_is_not_recommended(self) -> None:
+        player = discover_media_players(
+            [
+                State(
+                    "media_player.bathroom_homepod_2",
+                    "idle",
+                    "Bathroom HomePod",
+                    {
+                        "app_id": "music_assistant",
+                        "source": "Music Assistant Queue",
+                        "mass_player_type": "player",
+                    },
+                )
+            ]
+        )[0]
+
+        self.assertFalse(is_recommended_media_player(player))
+        self.assertFalse(is_music_assistant_announcement_player(player))
 
 
 if __name__ == "__main__":

@@ -7,15 +7,37 @@ from typing import Any
 from .const import DOMAIN
 from .models import AnnouncementResolution
 
+ISSUE_TYPES = (
+    "missing_media",
+    "no_target_zones",
+    "missing_music_assistant_service",
+    "incompatible_playback_targets",
+    "playback_url_signing_failed",
+    "playback_url_unreachable",
+)
+
 
 async def async_create_resolution_issues(hass: Any, resolution: AnnouncementResolution) -> None:
     """Create non-fatal Home Assistant repair issues for actionable failures."""
 
     if resolution.ok:
+        await async_clear_resolution_issues(hass, resolution.event_id)
         return
 
     for issue_type, error in _actionable_errors(resolution):
         await _async_create_issue(hass, resolution.event_id, issue_type, error)
+
+
+async def async_clear_resolution_issues(hass: Any, event_id: str) -> None:
+    """Clear stale repair issues for an event after it resolves cleanly."""
+
+    try:
+        from homeassistant.helpers import issue_registry as ir
+    except Exception:
+        return
+
+    for issue_type in ISSUE_TYPES:
+        ir.async_delete_issue(hass, DOMAIN, _issue_id(event_id, issue_type))
 
 
 def _actionable_errors(resolution: AnnouncementResolution) -> list[tuple[str, str]]:
@@ -46,7 +68,7 @@ async def _async_create_issue(hass: Any, event_id: str, issue_type: str, error: 
     ir.async_create_issue(
         hass,
         DOMAIN,
-        f"{event_id}_{issue_type}",
+        _issue_id(event_id, issue_type),
         is_fixable=False,
         severity=IssueSeverity.WARNING,
         translation_key=issue_type,
@@ -55,3 +77,7 @@ async def _async_create_issue(hass: Any, event_id: str, issue_type: str, error: 
             "error": error,
         },
     )
+
+
+def _issue_id(event_id: str, issue_type: str) -> str:
+    return f"{event_id}_{issue_type}"

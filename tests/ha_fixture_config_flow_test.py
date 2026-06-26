@@ -239,12 +239,20 @@ def test_options_flow_zones_prioritizes_recommended_music_assistant_players() ->
     flow = make_options_flow(entry)
     flow.hass = make_fake_hass(
         [
-            FakeState("media_player.tv", "idle", "TV"),
             FakeState(
-                "media_player.great_room",
+                "media_player.tv",
                 "idle",
-                "Great Room",
-                {"mass_player_id": "great_room"},
+                "TV",
+                {
+                    "app_id": "music_assistant",
+                    "source": "Music Assistant Queue",
+                    "mass_player_type": "player",
+                },
+            ),
+            FakeState(
+                "media_player.sugarloaf_great_room_juke_zone",
+                "idle",
+                "Sugarloaf Great Room Juke Zone",
             ),
         ]
     )
@@ -253,10 +261,12 @@ def test_options_flow_zones_prioritizes_recommended_music_assistant_players() ->
     selected_field = next(iter(result["data_schema"].schema.values()))
     options = selected_field.config.kwargs["options"]
 
-    assert [option["value"] for option in options] == ["media_player.great_room"]
+    assert [option["value"] for option in options] == ["media_player.sugarloaf_great_room_juke_zone"]
     assert result["description_placeholders"] == {
         "recommended_count": "1",
         "total_count": "2",
+        "missing_selected_zones": "None.",
+        "suggested_replacements": "None.",
     }
 
 
@@ -266,16 +276,14 @@ def test_options_flow_zones_labels_include_entity_ids() -> None:
     flow.hass = make_fake_hass(
         [
             FakeState(
-                "media_player.living_room_3",
+                "media_player.sugarloaf_living_room_juke_zone",
                 "idle",
                 "Whole House",
-                {"mass_player_id": "living_room_3"},
             ),
             FakeState(
-                "media_player.whole_house",
+                "media_player.sugarloaf_great_room_juke_zone",
                 "idle",
                 "Whole House",
-                {"mass_player_id": "whole_house"},
             ),
         ]
     )
@@ -285,9 +293,58 @@ def test_options_flow_zones_labels_include_entity_ids() -> None:
     options = selected_field.config.kwargs["options"]
 
     assert [option["label"] for option in options] == [
-        "Whole House (media_player.living_room_3)",
-        "Whole House (media_player.whole_house)",
+        "Whole House (media_player.sugarloaf_great_room_juke_zone)",
+        "Whole House (media_player.sugarloaf_living_room_juke_zone)",
     ]
+
+
+def test_options_flow_zones_surfaces_missing_selected_speaker_suggestions() -> None:
+    config = AnnouncementConfig(
+        zones=[
+            ZoneConfig(
+                entity_id="media_player.whole_house",
+                name="Whole House",
+                selected=True,
+            ),
+            ZoneConfig(
+                entity_id="media_player.great_room",
+                name="Great Room",
+                selected=True,
+            ),
+        ],
+    )
+    entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: config.to_dict()}, options={})
+    flow = make_options_flow(entry)
+    flow.hass = make_fake_hass(
+        [
+            FakeState(
+                "media_player.great_room",
+                "idle",
+                "Great Room",
+                {"mass_player_id": "great_room"},
+            ),
+            FakeState(
+                "media_player.living_room_3",
+                "idle",
+                "Whole House",
+                {"mass_player_id": "living_room_3"},
+            ),
+        ]
+    )
+
+    result = asyncio.run(flow.async_step_zones())
+    selected_field_marker = next(iter(result["data_schema"].schema.keys()))
+
+    assert selected_field_marker.default() == [
+        "media_player.great_room",
+    ]
+    assert result["description_placeholders"]["missing_selected_zones"] == (
+        "Whole House (media_player.whole_house)"
+    )
+    assert result["description_placeholders"]["suggested_replacements"] == (
+        "Whole House (media_player.whole_house) -> "
+        "Whole House (media_player.living_room_3)"
+    )
 
 
 def test_options_flow_zones_keeps_full_media_player_list_in_advanced() -> None:
@@ -306,6 +363,8 @@ def test_options_flow_zones_keeps_full_media_player_list_in_advanced() -> None:
     assert zones_result["description_placeholders"] == {
         "recommended_count": "0",
         "total_count": "2",
+        "missing_selected_zones": "None.",
+        "suggested_replacements": "None.",
     }
 
     advanced_result = asyncio.run(flow.async_step_advanced())

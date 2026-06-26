@@ -68,6 +68,17 @@ Assistant service are intended to show there. Incompatible speaker selections
 also show there. For Music Assistant playback, select media players that support
 Music Assistant announcements rather than Juke-native zone/control entities.
 
+If a Repair says a selected speaker is missing or incompatible after a Home
+Assistant, Music Assistant, restore, or device rediscovery event, re-open
+`Configure -> Speakers` and reselect the current Music Assistant player. Saved
+`media_player` entity IDs can change over time. After the event resolves
+cleanly, House Chime clears stale Repair issues for that event.
+
+The Speakers form shows missing saved speakers and suggested current matches
+when it can infer them from friendly names or entity IDs. Treat those
+suggestions as review hints, not automatic migration. House Chime will not
+replace a missing speaker unless you select the current entity before saving.
+
 `Selected target zones` is the saved configured speaker list. If an individual
 event is suppressed or resolves to no playable targets, inspect the
 last-resolution diagnostic detail instead of treating the configured speaker
