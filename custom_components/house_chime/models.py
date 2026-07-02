@@ -113,7 +113,6 @@ class EventConfig:
     default_voice_id: str | None = None
     common_trigger_sound: str | None = None
     trigger_sound_by_context: dict[str, str] = field(default_factory=dict)
-    bridge_helper_entity_id: str | None = None
     duplicate_window_seconds: int = DEFAULT_DUPLICATE_WINDOW_SECONDS
 
     @classmethod
@@ -126,7 +125,6 @@ class EventConfig:
             default_voice_id=data.get("default_voice_id"),
             common_trigger_sound=data.get("common_trigger_sound"),
             trigger_sound_by_context=dict(data.get("trigger_sound_by_context", {})),
-            bridge_helper_entity_id=data.get("bridge_helper_entity_id"),
             duplicate_window_seconds=int(
                 data.get("duplicate_window_seconds", DEFAULT_DUPLICATE_WINDOW_SECONDS)
             ),
@@ -141,7 +139,6 @@ class EventConfig:
             "default_voice_id": self.default_voice_id,
             "common_trigger_sound": self.common_trigger_sound,
             "trigger_sound_by_context": dict(self.trigger_sound_by_context),
-            "bridge_helper_entity_id": self.bridge_helper_entity_id,
             "duplicate_window_seconds": self.duplicate_window_seconds,
         }
 
@@ -254,7 +251,6 @@ class AnnouncementResolution:
     quiet_active: bool = False
     quiet_excluded_zone_entity_ids: list[str] = field(default_factory=list)
     volume_level: float = DEFAULT_NORMAL_VOLUME
-    bridge_helper_entity_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -271,5 +267,4 @@ class AnnouncementResolution:
             "quiet_active": self.quiet_active,
             "quiet_excluded_zone_entity_ids": list(self.quiet_excluded_zone_entity_ids),
             "volume_level": self.volume_level,
-            "bridge_helper_entity_id": self.bridge_helper_entity_id,
         }

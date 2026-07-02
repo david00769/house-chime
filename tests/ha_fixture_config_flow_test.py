@@ -100,7 +100,7 @@ def test_options_flow_init_uses_guided_setup_menu() -> None:
         "media",
         "events",
         "quiet",
-        "advanced",
+        "additional",
         "review",
     ]
 
@@ -208,7 +208,7 @@ def test_options_flow_event_step_configures_one_event_with_friendly_fields() -> 
     assert approach["voice_by_context"] == {}
 
 
-def test_options_flow_quiet_step_keeps_quiet_zone_rules_in_advanced() -> None:
+def test_options_flow_quiet_step_keeps_quiet_zone_rules_in_additional_settings() -> None:
     config = AnnouncementConfig()
     config.quiet.excluded_zone_entity_ids = ["media_player.bedroom"]
     config.quiet.zone_start = "21:00"
@@ -347,7 +347,7 @@ def test_options_flow_zones_surfaces_missing_selected_speaker_suggestions() -> N
     )
 
 
-def test_options_flow_zones_keeps_full_media_player_list_in_advanced() -> None:
+def test_options_flow_zones_keeps_full_media_player_list_in_additional_settings() -> None:
     entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: AnnouncementConfig().to_dict()}, options={})
     flow = make_options_flow(entry)
     flow.hass = make_fake_hass(
@@ -367,19 +367,19 @@ def test_options_flow_zones_keeps_full_media_player_list_in_advanced() -> None:
         "suggested_replacements": "None.",
     }
 
-    advanced_result = asyncio.run(flow.async_step_advanced())
-    advanced_fields = {
+    additional_result = asyncio.run(flow.async_step_additional())
+    additional_fields = {
         getattr(field, "schema", field): validator
-        for field, validator in advanced_result["data_schema"].schema.items()
+        for field, validator in additional_result["data_schema"].schema.items()
     }
-    all_zones_options = advanced_fields["selected_zones_all"].config.kwargs["options"]
+    all_zones_options = additional_fields["selected_zones_all"].config.kwargs["options"]
     assert [option["value"] for option in all_zones_options] == [
         "media_player.radio",
         "media_player.tv",
     ]
 
 
-def test_options_flow_advanced_persists_fallbacks_bridge_and_personal_chime() -> None:
+def test_options_flow_additional_persists_fallbacks_duplicate_windows_and_personal_chime() -> None:
     config = AnnouncementConfig(
         people=[PersonConfig(id="david", name="David", entity_id="person.david")],
         zones=[ZoneConfig(entity_id="media_player.great_room", name="Great Room", selected=True)],
@@ -389,21 +389,17 @@ def test_options_flow_advanced_persists_fallbacks_bridge_and_personal_chime() ->
     flow.hass = make_fake_hass(
         [
             FakeState("device_tracker.david_phone", "home", "David Phone"),
-            FakeState("input_boolean.package_arrived", "off", "Package arrived"),
             FakeState("media_player.great_room", "idle", "Great Room", {"mass_player_id": "great_room"}),
         ]
     )
 
     result = asyncio.run(
-        flow.async_step_advanced(
+        flow.async_step_additional(
             {
                 "david_fallback_trackers": ["device_tracker.david_phone"],
                 "quiet_excluded_zones": ["media_player.great_room"],
                 "zone_start": "21:00",
                 "zone_end": "07:00",
-                "front_door_approach_bridge_helper_entity_id": "__none__",
-                "front_door_package_bridge_helper_entity_id": "input_boolean.package_arrived",
-                "front_door_doorbell_bridge_helper_entity_id": "__none__",
                 "front_door_approach_duplicate_window_seconds": 45,
                 "front_door_package_duplicate_window_seconds": 60,
                 "front_door_doorbell_duplicate_window_seconds": 45,
@@ -424,7 +420,7 @@ def test_options_flow_advanced_persists_fallbacks_bridge_and_personal_chime() ->
     assert active_config["quiet"]["zone_start"] == "21:00"
     package = next(event for event in active_config["events"] if event["id"] == "front_door_package")
     approach = next(event for event in active_config["events"] if event["id"] == "front_door_approach")
-    assert package["bridge_helper_entity_id"] == "input_boolean.package_arrived"
+    assert "bridge_helper_entity_id" not in package
     assert package["duplicate_window_seconds"] == 60
     assert approach["trigger_sound_by_context"] == {
         "david": "media-source://media_source/local/chimes/david.mp3"

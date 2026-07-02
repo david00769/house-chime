@@ -1,14 +1,8 @@
-discover:
-  name: Discover entities
-  description: Discover candidate people, device trackers, and media players from Home Assistant state.
+ready: {}
 
-resolve:
-  name: Resolve announcement
-  description: Resolve an event into media, voice, target zones, volume, quiet rules, and diagnostics without playing it.
+event_enabled:
   fields:
     event_id:
-      name: Event
-      description: Announcement event to resolve.
       required: true
       selector:
         select:
@@ -20,13 +14,9 @@ resolve:
             - label: Doorbell
               value: front_door_doorbell
 
-play:
-  name: Play announcement
-  description: Resolve and play an announcement through Music Assistant/Juke.
+event_can_resolve:
   fields:
     event_id:
-      name: Event
-      description: Announcement event to play.
       required: true
       selector:
         select:
@@ -37,3 +27,13 @@ play:
               value: front_door_package
             - label: Doorbell
               value: front_door_doorbell
+
+quiet_mode:
+  fields:
+    state:
+      required: true
+      selector:
+        select:
+          options:
+            - active
+            - inactive

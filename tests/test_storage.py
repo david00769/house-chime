@@ -23,6 +23,23 @@ class StorageTest(unittest.TestCase):
         self.assertEqual(migrated["quiet"]["volume_multiplier"], 0.5)
         self.assertEqual(migrated["normal_volume"], 0.8)
 
+    def test_migration_drops_removed_bridge_helper_fields(self) -> None:
+        migrated, changed = migrate_config_dict(
+            {
+                "version": 1,
+                "events": [
+                    {
+                        "id": "front_door_package",
+                        "name": "Package",
+                        "bridge_helper_entity_id": "input_boolean.package_arrived",
+                    }
+                ],
+            }
+        )
+
+        self.assertTrue(changed)
+        self.assertNotIn("bridge_helper_entity_id", migrated["events"][0])
+
 
 if __name__ == "__main__":
     unittest.main()

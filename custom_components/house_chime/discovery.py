@@ -83,17 +83,6 @@ def is_music_assistant_announcement_player(record: DiscoveredEntity) -> bool:
     return any(token in haystack for token in ("juke", "announcement"))
 
 
-def discover_helpers(states: Iterable[Any]) -> list[DiscoveredEntity]:
-    """Return helper entities that can be used as bridge triggers."""
-
-    helpers: list[DiscoveredEntity] = []
-    for state in states:
-        entity_id = _entity_id(state)
-        if entity_id.startswith(("input_boolean.", "input_button.", "button.")):
-            helpers.append(_record(state))
-    return sorted(helpers, key=lambda item: item.entity_id)
-
-
 def _discover_domain(states: Iterable[Any], domain: str) -> list[DiscoveredEntity]:
     prefix = f"{domain}."
     return sorted((_record(state) for state in states if _entity_id(state).startswith(prefix)), key=lambda item: item.entity_id)

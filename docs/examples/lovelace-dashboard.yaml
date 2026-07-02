@@ -86,7 +86,7 @@ views:
                 event_id: front_door_doorbell
 
       - type: entities
-        title: Advanced Diagnostics
+        title: Diagnostics
         entities:
           - entity: binary_sensor.house_chime_last_resolution_valid
             name: Last dry run valid
@@ -96,5 +96,3 @@ views:
             name: Last media
           - entity: sensor.house_chime_last_failure_reason
             name: Last failure
-          - entity: binary_sensor.house_chime_package_bridge_helper_active
-            name: Package bridge pending

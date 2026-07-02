@@ -20,7 +20,7 @@ After adding the integration, open `Configure`. House Chime walks through:
 - `Sounds`: choose uploaded announcement and chime audio.
 - `Events`: enable Approach, Package, and Doorbell and choose voices.
 - `Quiet rules`: configure quiet hours and quiet volume.
-- `Advanced`: configure fallback trackers, bridge helpers, duplicate windows,
+- `Additional settings`: configure fallback trackers, duplicate windows,
   quiet-zone exclusions, and per-person chime overrides.
 - `Review / Dry Run`: check the setup without playing audio.
 
@@ -39,8 +39,8 @@ existing media flow:
 3. Open `Settings -> Devices & services -> House Chime -> Configure -> Sounds`.
 4. Select the uploaded files with the media picker.
 
-If the media picker is unavailable in a Home Assistant version, use Advanced
-raw paths such as:
+If the media picker is unavailable in a Home Assistant version, use Additional
+settings raw paths such as:
 
 ```text
 media-source://media_source/local/announcements/front-door.mp3
@@ -99,5 +99,31 @@ Use these services before live playback:
 The `Review / Dry Run` configuration step performs the same kind of non-audible
 validation for all three built-in events.
 
-Do not call `house_chime.play` or `house_chime.bridge_trigger` during quiet
-hours unless an audible test is intended.
+Do not call `house_chime.play` during quiet hours unless an audible test is
+intended.
+
+## Automation Pattern
+
+Use the real source integration as the automation trigger, add House Chime
+conditions when useful, then call `house_chime.play`.
+
+Example shape:
+
+```yaml
+triggers:
+  - trigger: event
+    event_type: source_integration_package_detected
+conditions:
+  - condition: house_chime.ready
+  - condition: house_chime.event_enabled
+    options:
+      event_id: front_door_package
+actions:
+  - action: house_chime.play
+    data:
+      event_id: front_door_package
+```
+
+Do not create `input_boolean` handoff helpers for package, approach, or doorbell
+events. House Chime does not own source-event capture; it owns event resolution,
+diagnostics, and playback.

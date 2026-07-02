@@ -1,0 +1,24 @@
+announcement_activity:
+  fields:
+    event_type:
+      required: false
+      selector:
+        select:
+          options:
+            - label: Resolved
+              value: resolved
+            - label: Played
+              value: played
+            - label: Play failed
+              value: play_failed
+    event_id:
+      required: false
+      selector:
+        select:
+          options:
+            - label: Approach
+              value: front_door_approach
+            - label: Package
+              value: front_door_package
+            - label: Doorbell
+              value: front_door_doorbell

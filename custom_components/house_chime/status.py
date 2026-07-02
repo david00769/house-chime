@@ -31,7 +31,6 @@ BINARY_SENSOR_DESCRIPTIONS = (
     StatusEntityDescription("integration_ready", "Integration ready", "mdi:check-circle"),
     StatusEntityDescription("quiet_mode_active", "Quiet mode active", "mdi:volume-low"),
     StatusEntityDescription("last_resolution_valid", "Last resolution valid", "mdi:check-decagram"),
-    StatusEntityDescription("package_bridge_helper_active", "Package bridge helper active", "mdi:package-variant"),
 )
 
 
@@ -67,7 +66,6 @@ def initial_status(config: AnnouncementConfig) -> dict[str, Any]:
         "last_failure_reason": None,
         "quiet_mode_active": False,
         "last_resolution_valid": False,
-        "package_bridge_helper_active": False,
         "last_resolution": None,
     }
 
@@ -77,10 +75,9 @@ def record_resolution(
     resolution: AnnouncementResolution,
     *,
     outcome: str,
-    helper_states: dict[str, str] | None = None,
     has_music_assistant: bool | None = None,
 ) -> None:
-    """Update runtime status after resolve/play/bridge actions."""
+    """Update runtime status after resolve/play actions."""
 
     if has_music_assistant is not None:
         status["integration_ready"] = bool(has_music_assistant)
@@ -98,8 +95,3 @@ def record_resolution(
     elif outcome == "failed" or not resolution.ok:
         status["last_failed_event"] = resolution.event_id
         status["last_failure_reason"] = "; ".join(resolution.errors or resolution.warnings)
-
-    if resolution.bridge_helper_entity_id and helper_states is not None:
-        status["package_bridge_helper_active"] = (
-            helper_states.get(resolution.bridge_helper_entity_id) == "on"
-        )

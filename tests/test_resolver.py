@@ -67,7 +67,6 @@ def sample_config() -> AnnouncementConfig:
                 id="front_door_package",
                 name="Front door package",
                 default_voice_id="pierce",
-                bridge_helper_entity_id="input_boolean.google_package_arrived",
             ),
         ],
         quiet=QuietConfig(enabled=True, start="22:00", end="08:00", volume_multiplier=0.5),

@@ -4,7 +4,6 @@ import unittest
 
 from custom_components.house_chime.discovery import (
     discover_device_trackers,
-    discover_helpers,
     discover_media_players,
     discover_people,
     is_music_assistant_announcement_player,
@@ -33,7 +32,6 @@ class DiscoveryTest(unittest.TestCase):
             State("person.david", "home", "David"),
             State("device_tracker.david_phone", "home", "David Phone"),
             State("media_player.great_room", "idle", "Great Room"),
-            State("input_boolean.google_package_arrived", "off", "Google package arrived"),
             State("sensor.temperature", "72"),
         ]
 
@@ -45,10 +43,6 @@ class DiscoveryTest(unittest.TestCase):
         self.assertEqual(
             [item.entity_id for item in discover_media_players(states)],
             ["media_player.great_room"],
-        )
-        self.assertEqual(
-            [item.entity_id for item in discover_helpers(states)],
-            ["input_boolean.google_package_arrived"],
         )
 
     def test_ranks_music_assistant_announcement_players_first(self) -> None:

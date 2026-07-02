@@ -14,7 +14,6 @@ from homeassistant.helpers import selector
 from .const import CONF_ACTIVE_CONFIG, DEFAULT_EVENTS, DEFAULT_NAME, DOMAIN
 from .discovery import (
     discover_device_trackers,
-    discover_helpers,
     discover_media_players,
     discover_people,
     is_recommended_media_player,
@@ -49,7 +48,7 @@ SETUP_MENU_OPTIONS = [
     "media",
     "events",
     "quiet",
-    "advanced",
+    "additional",
     "review",
 ]
 
@@ -388,7 +387,6 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                     default_voice_id=user_input.get("default_voice_id"),
                     common_trigger_sound=existing.common_trigger_sound,
                     trigger_sound_by_context=dict(existing.trigger_sound_by_context),
-                    bridge_helper_entity_id=existing.bridge_helper_entity_id,
                     duplicate_window_seconds=existing.duplicate_window_seconds,
                 )
                 if existing.id == event_id
@@ -477,12 +475,10 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
 
         return await self.async_step_media(user_input)
 
-    async def async_step_advanced(self, user_input: dict[str, Any] | None = None):
-        """Configure advanced helpers, fallbacks, and raw overrides."""
+    async def async_step_additional(self, user_input: dict[str, Any] | None = None):
+        """Configure additional fallbacks, duplicate windows, and raw overrides."""
 
         config = self._config()
-        helper_options = [selector.SelectOptionDict(value=NONE_VALUE, label="None")]
-        helper_options.extend(_options(discover_helpers(self.hass.states.async_all()), include_entity_id=True))
         tracker_options = _options(discover_device_trackers(self.hass.states.async_all()), include_entity_id=True)
         zone_options = _options(discover_media_players(self.hass.states.async_all()), include_entity_id=True)
         events_by_id = {event.id: event for event in config.events}
@@ -523,8 +519,6 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                 event = events_by_id[event_id]
                 if _trigger_sound_field(event_id) in user_input:
                     event.common_trigger_sound = _media_value(user_input.get(_trigger_sound_field(event_id)))
-                bridge_helper = user_input.get(_bridge_helper_field(event_id))
-                event.bridge_helper_entity_id = None if bridge_helper == NONE_VALUE else bridge_helper
                 event.duplicate_window_seconds = int(user_input[_duplicate_window_field(event_id)])
                 for person in config.people:
                     value = _media_value(user_input.get(_trigger_sound_context_field(event_id, person.id)))
@@ -588,12 +582,6 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
             fields[vol.Optional(_trigger_sound_field(event_id), default=event.common_trigger_sound or "")] = str
             fields[
                 vol.Optional(
-                    _bridge_helper_field(event_id),
-                    default=event.bridge_helper_entity_id or NONE_VALUE,
-                )
-            ] = selector.SelectSelector(selector.SelectSelectorConfig(options=helper_options))
-            fields[
-                vol.Optional(
                     _duplicate_window_field(event_id),
                     default=event.duplicate_window_seconds,
                 )
@@ -616,7 +604,7 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                 ] = str
 
         return self.async_show_form(
-            step_id="advanced",
+            step_id="additional",
             data_schema=vol.Schema(fields),
         )
 
@@ -784,10 +772,6 @@ def _trigger_sound_context_field(event_id: str, person_id: str) -> str:
 
 def _fallback_trackers_field(person_id: str) -> str:
     return f"{person_id}_fallback_trackers"
-
-
-def _bridge_helper_field(event_id: str) -> str:
-    return f"{event_id}_bridge_helper_entity_id"
 
 
 def _duplicate_window_field(event_id: str) -> str:

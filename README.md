@@ -3,7 +3,7 @@
 House Chime is a Home Assistant custom integration for household audio
 announcements.
 
-It discovers Home Assistant people, playback zones, and helper entities, then
+It discovers Home Assistant people and playback zones, then
 resolves each configured event into a media file, target zones, volume, quiet
 rules, duplicate suppression, and diagnostics. Playback currently uses Music
 Assistant's `music_assistant.play_announcement` service.
@@ -35,11 +35,39 @@ House Chime registers:
 - `house_chime.discover`
 - `house_chime.resolve`
 - `house_chime.play`
-- `house_chime.bridge_trigger`
 
 Use `resolve` for dry runs. Use `play` for manual announcements. Use
-`bridge_trigger` for external helper-driven automations that should reset a
-helper after handling an event.
+`play` from automations whose triggers come from the real source integration,
+for example a doorbell, camera, presence, or package-delivery integration.
+House Chime does not create or reset helper entities.
+
+House Chime also exposes purpose-specific automation conditions for readiness,
+event enablement, event resolution, and quiet mode, plus an Activity event
+entity and `house_chime_event` bus event for follow-up automations after a
+resolve/play/failure.
+
+## Automation Model
+
+House Chime is not a source-event bridge. Automations should start from the
+real source integration and call House Chime as the announcement action:
+
+```yaml
+triggers:
+  - trigger: event
+    event_type: source_integration_package_detected
+conditions:
+  - condition: house_chime.ready
+  - condition: house_chime.event_enabled
+    options:
+      event_id: front_door_package
+actions:
+  - action: house_chime.play
+    data:
+      event_id: front_door_package
+```
+
+Use the `house_chime.announcement_activity` trigger only for follow-up
+automations after House Chime resolves, plays, or fails an announcement.
 
 ## Guided Setup
 
@@ -54,7 +82,7 @@ The setup flow is intentionally operator-focused:
 - `Sounds`: select already-uploaded chime and announcement audio.
 - `Events`: enable and map voices for Approach, Package, and Doorbell.
 - `Quiet rules`: set quiet hours and quiet volume.
-- `Advanced`: fallback trackers, bridge helpers, duplicate windows, quiet-zone
+- `Additional settings`: fallback trackers, duplicate windows, quiet-zone
   exclusions, and per-person chime overrides.
 - `Review / Dry Run`: validate the setup without playing audio.
 
@@ -132,8 +160,8 @@ The initial public events are:
 - Package
 - Doorbell
 
-Internal event IDs are still used by services and automations, but the setup UI
-uses the friendly names above.
+Internal event IDs are still used by service actions and direct source
+automations, but the setup UI uses the friendly names above.
 
 ## Development
 

@@ -70,12 +70,16 @@ def migrate_config_dict(data: dict[str, Any] | None) -> tuple[dict[str, Any], bo
                 "default_voice_id": "samantha",
                 "common_trigger_sound": None,
                 "trigger_sound_by_context": {},
-                "bridge_helper_entity_id": None,
                 "duplicate_window_seconds": 45,
             }
             for event_id in DEFAULT_EVENTS
         ]
         changed = True
+    else:
+        for event in config["events"]:
+            if "bridge_helper_entity_id" in event:
+                event.pop("bridge_helper_entity_id", None)
+                changed = True
     config.setdefault(
         "quiet",
         {

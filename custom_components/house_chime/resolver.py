@@ -35,7 +35,6 @@ def resolve_announcement(
     resolution = AnnouncementResolution(
         event_id=event_id,
         ok=True,
-        bridge_helper_entity_id=event.bridge_helper_entity_id,
     )
 
     if not event.enabled:

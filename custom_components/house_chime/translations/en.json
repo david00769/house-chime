@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "House Chime",
-        "description": "Create the announcement control integration. House Chime discovers Home Assistant people, playback zones, helpers, and approved media paths, then plays announcements through Music Assistant.",
+        "description": "Create the announcement control integration. House Chime discovers Home Assistant people, playback zones, and approved media paths, then plays announcements through Music Assistant.",
         "data": {
           "name": "Name"
         },
@@ -43,7 +43,7 @@
     "step": {
       "init": {
         "title": "House Chime setup",
-        "description": "Configure people, priority, speakers, sounds, events, quiet rules, advanced settings, and a dry-run review.",
+        "description": "Configure people, priority, speakers, sounds, events, quiet rules, additional settings, and a dry-run review.",
         "menu_options": {
           "people": "People",
           "priority": "Priority",
@@ -52,7 +52,7 @@
           "media": "Sounds",
           "events": "Events",
           "quiet": "Quiet rules",
-          "advanced": "Advanced",
+          "additional": "Additional settings",
           "review": "Review / Dry Run"
         }
       },
@@ -83,7 +83,7 @@
       },
       "zones": {
         "title": "Speakers",
-        "description": "Select the speakers or Music Assistant players used for announcements. Recommended players shown: {recommended_count}. Total media players discovered: {total_count}. Advanced shows the full list when needed.\n\nMissing saved speakers:\n{missing_selected_zones}\n\nSuggested current matches, for review only:\n{suggested_replacements}\n\nHouse Chime does not automatically replace missing speaker entity IDs. Select the current speaker you want before saving.",
+        "description": "Select the speakers or Music Assistant players used for announcements. Recommended players shown: {recommended_count}. Total media players discovered: {total_count}. Additional settings shows the full list when needed.\n\nMissing saved speakers:\n{missing_selected_zones}\n\nSuggested current matches, for review only:\n{suggested_replacements}\n\nHouse Chime does not automatically replace missing speaker entity IDs. Select the current speaker you want before saving.",
         "data": {
           "selected_zones": "Announcement speakers"
         }
@@ -166,7 +166,7 @@
       },
       "quiet": {
         "title": "Quiet rules",
-        "description": "Configure the global quiet window. Quiet-zone exclusions are in Advanced.",
+        "description": "Configure the global quiet window. Quiet-zone exclusions are in Additional settings.",
         "data": {
           "enabled": "Enable quiet mode",
           "start": "Quiet start",
@@ -179,17 +179,14 @@
           "volume_multiplier": "Volume multiplier during quiet hours. 0.5 means 50 percent of the normal announcement volume."
         }
       },
-      "advanced": {
-        "title": "Advanced",
-        "description": "Configure fallback trackers, package bridge helpers, duplicate suppression, quiet-zone exclusions, and per-person chime overrides.",
+      "additional": {
+        "title": "Additional settings",
+        "description": "Configure fallback trackers, duplicate suppression, quiet-zone exclusions, and per-person chime overrides.",
         "data": {
           "quiet_excluded_zones": "Quiet-zone excluded speakers",
           "selected_zones_all": "All announcement speakers",
           "zone_start": "Quiet-zone start",
           "zone_end": "Quiet-zone end",
-          "front_door_approach_bridge_helper_entity_id": "Approach bridge helper",
-          "front_door_package_bridge_helper_entity_id": "Package bridge helper",
-          "front_door_doorbell_bridge_helper_entity_id": "Doorbell bridge helper",
           "front_door_approach_duplicate_window_seconds": "Approach duplicate window",
           "front_door_package_duplicate_window_seconds": "Package duplicate window",
           "front_door_doorbell_duplicate_window_seconds": "Doorbell duplicate window",
