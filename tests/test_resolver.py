@@ -220,6 +220,26 @@ class ResolverTest(unittest.TestCase):
         self.assertEqual(resolution.target_player_entity_ids, ["media_player.bedroom"])
         self.assertIn("unavailable_zone:media_player.great_room", resolution.warnings)
 
+    def test_missing_zone_warns_and_is_removed_from_targets(self) -> None:
+        config = sample_config()
+        runtime = ResolverRuntime(
+            states={
+                "person.david": "home",
+                "media_player.bedroom": "idle",
+            }
+        )
+
+        resolution = resolve_announcement(
+            config,
+            "front_door_approach",
+            runtime,
+            now=datetime.fromisoformat("2026-05-15T14:00:00"),
+        )
+
+        self.assertTrue(resolution.ok)
+        self.assertEqual(resolution.target_player_entity_ids, ["media_player.bedroom"])
+        self.assertIn("missing_zone:media_player.great_room", resolution.warnings)
+
 
 if __name__ == "__main__":
     unittest.main()

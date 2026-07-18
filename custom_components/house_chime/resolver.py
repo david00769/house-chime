@@ -99,18 +99,26 @@ def resolve_announcement(
             excluded_zones.add(zone.entity_id)
 
     targets = [entity_id for entity_id in selected_zones if entity_id not in excluded_zones]
+    missing_targets = [
+        entity_id
+        for entity_id in targets
+        if entity_id not in runtime.states
+    ]
     unavailable_targets = [
         entity_id
         for entity_id in targets
         if runtime.states.get(entity_id) in {STATE_UNAVAILABLE, STATE_UNKNOWN}
     ]
-    targets = [entity_id for entity_id in targets if entity_id not in unavailable_targets]
+    removed_targets = set(missing_targets) | set(unavailable_targets)
+    targets = [entity_id for entity_id in targets if entity_id not in removed_targets]
 
     if not targets:
         resolution.ok = False
         resolution.errors.append("no_target_zones")
     if unavailable_targets:
         resolution.warnings.extend(f"unavailable_zone:{entity_id}" for entity_id in unavailable_targets)
+    if missing_targets:
+        resolution.warnings.extend(f"missing_zone:{entity_id}" for entity_id in missing_targets)
 
     resolution.target_player_entity_ids = targets
     resolution.quiet_active = quiet_active
