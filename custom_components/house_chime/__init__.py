@@ -503,7 +503,6 @@ def _refresh_presence_for_entity(
     data = hass.data.get(DOMAIN, {}).get(entry_id)
     if data is None:
         return
-    entity_id = event.data.get("entity_id")
     if entity_id not in _presence_entity_ids(data["config"]):
         return
     _refresh_presence_status(hass, data)

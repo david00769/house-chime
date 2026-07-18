@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import unittest
+from types import SimpleNamespace
 
+from custom_components.house_chime import _refresh_presence_for_entity
+from custom_components.house_chime.const import DOMAIN
 from custom_components.house_chime.models import (
     AnnouncementConfig,
     AnnouncementResolution,
@@ -96,6 +99,43 @@ class StatusTest(unittest.TestCase):
         self.assertEqual(status["playback_enabled_people"], [])
         self.assertEqual(status["playback_disabled_people"], ["david", "claudette"])
         self.assertIsNone(status["active_household_context"])
+
+    def test_scheduled_presence_refresh_uses_the_changed_entity_id(self) -> None:
+        class FakeStates:
+            def async_all(self):
+                return [
+                    SimpleNamespace(entity_id="person.claudette", state="unknown"),
+                    SimpleNamespace(entity_id="device_tracker.claudette_phone", state="home"),
+                ]
+
+        class FakeBus:
+            def async_fire(self, *args, **kwargs):
+                return None
+
+        config = AnnouncementConfig(
+            people=[
+                PersonConfig(
+                    id="claudette",
+                    name="Claudette",
+                    entity_id="person.claudette",
+                    fallback_tracker_entity_ids=["device_tracker.claudette_phone"],
+                )
+            ]
+        )
+        status = initial_status(config)
+        hass = SimpleNamespace(
+            data={DOMAIN: {"entry": {"config": config, "status": status}}},
+            states=FakeStates(),
+            bus=FakeBus(),
+        )
+
+        _refresh_presence_for_entity(
+            hass,
+            "entry",
+            "device_tracker.claudette_phone",
+        )
+
+        self.assertEqual(status["present_household_people"], ["claudette"])
 
     def test_intentional_person_preference_suppression_is_not_a_failure(self) -> None:
         status = initial_status(AnnouncementConfig())
