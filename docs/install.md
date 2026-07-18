@@ -105,6 +105,11 @@ validation for all three built-in events.
 Do not call `house_chime.play` during quiet hours unless an audible test is
 intended.
 
+Manual dashboard play-test buttons may pass
+`skip_duplicate_suppression: true` so a deliberate repeat test is not blocked
+by the event duplicate window. Leave that option off for real source
+automations.
+
 ## Automation Pattern
 
 Use the real source integration as the automation trigger, add House Chime

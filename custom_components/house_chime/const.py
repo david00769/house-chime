@@ -4,6 +4,7 @@ DOMAIN = "house_chime"
 
 CONF_ACTIVE_CONFIG = "active_config"
 CONF_EVENT_ID = "event_id"
+CONF_SKIP_DUPLICATE_SUPPRESSION = "skip_duplicate_suppression"
 CONF_MEDIA_EXISTS = "media_exists"
 CONF_EVENT_TYPE = "event_type"
 

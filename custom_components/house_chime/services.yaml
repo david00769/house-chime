@@ -19,6 +19,13 @@ resolve:
               value: front_door_package
             - label: Doorbell
               value: front_door_doorbell
+    skip_duplicate_suppression:
+      name: Skip duplicate suppression
+      description: Ignore the event duplicate window for an operator dry run.
+      required: false
+      default: false
+      selector:
+        boolean:
 
 play:
   name: Play announcement
@@ -37,3 +44,10 @@ play:
               value: front_door_package
             - label: Doorbell
               value: front_door_doorbell
+    skip_duplicate_suppression:
+      name: Skip duplicate suppression
+      description: Ignore the event duplicate window for a deliberate manual play test. Leave off for source automations.
+      required: false
+      default: false
+      selector:
+        boolean:

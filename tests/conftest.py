@@ -132,6 +132,7 @@ def _install_homeassistant_stubs() -> None:
     core.SupportsResponse = SupportsResponse
     core.callback = callback
     config_validation.string = str
+    config_validation.boolean = bool
     dispatcher.async_dispatcher_connect = async_dispatcher_connect
     dispatcher.async_dispatcher_send = async_dispatcher_send
     helpers.config_validation = config_validation

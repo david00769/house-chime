@@ -31,6 +31,7 @@ from .const import (
     ANNOUNCEMENT_EVENT_RESOLVED,
     CONF_ACTIVE_CONFIG,
     CONF_EVENT_ID,
+    CONF_SKIP_DUPLICATE_SUPPRESSION,
     DOMAIN,
     PLATFORMS,
     SIGNAL_STATUS_UPDATED,
@@ -53,7 +54,12 @@ SERVICE_RESOLVE = "resolve"
 SERVICE_PLAY = "play"
 
 EVENT_SCHEMA = (
-    vol.Schema({vol.Required(CONF_EVENT_ID): cv.string})
+    vol.Schema(
+        {
+            vol.Required(CONF_EVENT_ID): cv.string,
+            vol.Optional(CONF_SKIP_DUPLICATE_SUPPRESSION, default=False): cv.boolean,
+        }
+    )
     if vol is not None and cv is not None
     else None
 )
@@ -243,17 +249,22 @@ async def _resolve_from_service_call(
 ):
     config: AnnouncementConfig = data["config"]
     states = {state.entity_id: state.state for state in hass.states.async_all()}
+    last_triggered_by_event = (
+        {}
+        if call.data.get(CONF_SKIP_DUPLICATE_SUPPRESSION, False)
+        else data["last_triggered_by_event"]
+    )
     runtime = ResolverRuntime(
         states=states,
         available_media=None,
-        last_triggered_by_event=data["last_triggered_by_event"],
+        last_triggered_by_event=last_triggered_by_event,
     )
     preliminary = resolve_announcement(config, call.data[CONF_EVENT_ID], runtime)
     available_media = await async_available_media_for_resolution(hass, preliminary)
     validated_runtime = ResolverRuntime(
         states=states,
         available_media=available_media,
-        last_triggered_by_event=data["last_triggered_by_event"],
+        last_triggered_by_event=last_triggered_by_event,
     )
     return resolve_announcement(config, call.data[CONF_EVENT_ID], validated_runtime)
 

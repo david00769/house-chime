@@ -36,10 +36,14 @@ House Chime registers:
 - `house_chime.resolve`
 - `house_chime.play`
 
-Use `resolve` for dry runs. Use `play` for manual announcements. Use
-`play` from automations whose triggers come from the real source integration,
-for example a doorbell, camera, presence, or package-delivery integration.
-House Chime does not create or reset helper entities.
+Use `resolve` for dry runs. Use `play` for manual announcements. Manual
+operator test buttons may pass `skip_duplicate_suppression: true` so repeated
+tests are not blocked by the event duplicate window. Do not use that flag in
+real source automations.
+
+Use `play` from automations whose triggers come from the real source
+integration, for example a doorbell, camera, presence, or package-delivery
+integration. House Chime does not create or reset helper entities.
 
 House Chime also exposes purpose-specific automation conditions for readiness,
 event enablement, event resolution, and quiet mode, plus an Activity event
@@ -65,6 +69,9 @@ actions:
     data:
       event_id: front_door_package
 ```
+
+Leave `skip_duplicate_suppression` unset or `false` in real source automations
+so duplicate doorbell/camera/package events are still suppressed.
 
 Use the `house_chime.announcement_activity` trigger only for follow-up
 automations after House Chime resolves, plays, or fails an announcement.

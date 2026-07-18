@@ -68,6 +68,7 @@ views:
               service: house_chime.play
               data:
                 event_id: front_door_approach
+                skip_duplicate_suppression: true
           - type: button
             name: Play Package
             icon: mdi:package-variant
@@ -76,6 +77,7 @@ views:
               service: house_chime.play
               data:
                 event_id: front_door_package
+                skip_duplicate_suppression: true
           - type: button
             name: Play Doorbell
             icon: mdi:doorbell-video
@@ -84,6 +86,7 @@ views:
               service: house_chime.play
               data:
                 event_id: front_door_doorbell
+                skip_duplicate_suppression: true
 
       - type: entities
         title: Diagnostics
