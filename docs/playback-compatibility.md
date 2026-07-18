@@ -10,11 +10,12 @@ stopped and the failure is exposed through House Chime diagnostics and Home
 Assistant Repairs.
 
 House Chime also checks the selected speaker targets before the Music Assistant
-handoff. The targets must be media players that support Music Assistant
-announcements. Juke-native zone/control entities can still be useful for the
-broader audio system, but they are not valid targets for
-`music_assistant.play_announcement` unless Music Assistant exposes them with the
-announcement features.
+handoff. The targets must be available Music Assistant `media_player` entities
+that match the `music_assistant.play_announcement` target requirements. Juke
+AirPlay2 zones are supported through their Music Assistant-presented players.
+Juke-native input/control entities can still be useful for the broader audio
+system, but they are not valid House Chime targets unless Music Assistant
+exposes them with the announcement features.
 
 Saved speaker selections are Home Assistant entity IDs. Music Assistant,
 Home Assistant, restore, or device rediscovery changes can retire an old
@@ -29,7 +30,7 @@ it.
 
 ## Tested
 
-- Juke Audio through Music Assistant
+- Juke Audio AirPlay2 zones through Music Assistant
 
 ## Untested
 

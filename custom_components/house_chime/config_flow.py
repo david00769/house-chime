@@ -17,6 +17,7 @@ from .discovery import (
     discover_media_players,
     discover_people,
     is_recommended_media_player,
+    is_selectable_announcement_player,
 )
 from .models import (
     AnnouncementConfig,
@@ -194,33 +195,22 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         )
 
     async def async_step_zones(self, user_input: dict[str, Any] | None = None):
-        """Configure selected playback zones (Juke/Music Assistant recommended list)."""
+        """Configure selected playback zones (available Music Assistant targets)."""
 
         config = self._config()
         discovered_zones = discover_media_players(self.hass.states.async_all())
-        current_selected = {zone.entity_id for zone in config.zones if zone.selected}
-        discovered_zone_ids = {zone.entity_id for zone in discovered_zones}
+        selectable_zones = _selectable_announcement_zones(discovered_zones)
+        selectable_zone_ids = {zone.entity_id for zone in selectable_zones}
         available_selected = [
             zone.entity_id
             for zone in config.zones
-            if zone.selected and zone.entity_id in discovered_zone_ids
+            if zone.selected and zone.entity_id in selectable_zone_ids
         ]
-        recommended_zones = [
-            zone
-            for zone in discovered_zones
-            if is_recommended_media_player(zone) or zone.entity_id in current_selected
-        ]
-        # The default Speakers picker intentionally focuses on Music Assistant/Juke
-        # targets to avoid confusing users with unrelated media_player entities
-        # (TVs, receivers, stale AirPlay bridges, etc.).
-        #
-        # We still include any *currently selected* non-recommended entities so a
-        # user's saved configuration does not silently disappear from the UI.
-        zone_options = _options(recommended_zones, include_entity_id=True)
+        zone_options = _options(selectable_zones, include_entity_id=True)
         zones_by_entity = {zone.entity_id: zone for zone in config.zones}
 
         if user_input is not None:
-            selected = set(user_input.get("selected_zones", []))
+            selected = set(user_input.get("selected_zones", [])) & selectable_zone_ids
             config.zones = [
                 ZoneConfig(
                     entity_id=item.entity_id,
@@ -228,7 +218,7 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                     selected=item.entity_id in selected,
                     quiet_excluded=zones_by_entity.get(item.entity_id, ZoneConfig(item.entity_id)).quiet_excluded,
                 )
-                for item in discovered_zones
+                for item in selectable_zones
             ]
             return self._save(config)
 
@@ -249,28 +239,29 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                 }
             ),
             description_placeholders={
-                "recommended_count": str(len(recommended_zones)),
+                "recommended_count": str(len(selectable_zones)),
                 "total_count": str(len(discovered_zones)),
-                **_speaker_drift_placeholders(config, discovered_zones),
+                **_speaker_drift_placeholders(config, selectable_zones),
             },
         )
 
     async def async_step_zones_all(self, user_input: dict[str, Any] | None = None):
-        """Configure selected playback zones (full media_player list)."""
+        """Configure selected playback zones from all available Music Assistant targets."""
 
         config = self._config()
         discovered_zones = discover_media_players(self.hass.states.async_all())
+        selectable_zones = _selectable_announcement_zones(discovered_zones)
         zones_by_entity = {zone.entity_id: zone for zone in config.zones}
-        discovered_zone_ids = {zone.entity_id for zone in discovered_zones}
+        selectable_zone_ids = {zone.entity_id for zone in selectable_zones}
         available_selected = [
             zone.entity_id
             for zone in config.zones
-            if zone.selected and zone.entity_id in discovered_zone_ids
+            if zone.selected and zone.entity_id in selectable_zone_ids
         ]
-        zone_options = _options(discovered_zones, include_entity_id=True)
+        zone_options = _options(selectable_zones, include_entity_id=True)
 
         if user_input is not None:
-            selected = set(user_input.get("selected_zones", []))
+            selected = set(user_input.get("selected_zones", [])) & selectable_zone_ids
             config.zones = [
                 ZoneConfig(
                     entity_id=item.entity_id,
@@ -278,11 +269,11 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                     selected=item.entity_id in selected,
                     quiet_excluded=zones_by_entity.get(item.entity_id, ZoneConfig(item.entity_id)).quiet_excluded,
                 )
-                for item in discovered_zones
+                for item in selectable_zones
             ]
             return self._save(config)
 
-        recommended_count = sum(1 for zone in discovered_zones if is_recommended_media_player(zone))
+        recommended_count = sum(1 for zone in selectable_zones if is_recommended_media_player(zone))
         return self.async_show_form(
             step_id="zones_all",
             data_schema=vol.Schema(
@@ -302,7 +293,7 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
             description_placeholders={
                 "recommended_count": str(recommended_count),
                 "total_count": str(len(discovered_zones)),
-                **_speaker_drift_placeholders(config, discovered_zones),
+                **_speaker_drift_placeholders(config, selectable_zones),
             },
         )
 
@@ -480,7 +471,10 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
 
         config = self._config()
         tracker_options = _options(discover_device_trackers(self.hass.states.async_all()), include_entity_id=True)
-        zone_options = _options(discover_media_players(self.hass.states.async_all()), include_entity_id=True)
+        discovered_zones = discover_media_players(self.hass.states.async_all())
+        selectable_zones = _selectable_announcement_zones(discovered_zones)
+        selectable_zone_ids = {zone.entity_id for zone in selectable_zones}
+        zone_options = _options(selectable_zones, include_entity_id=True)
         events_by_id = {event.id: event for event in config.events}
 
         if user_input is not None:
@@ -489,7 +483,7 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                     user_input.get(_fallback_trackers_field(person.id))
                 )
             if "selected_zones_all" in user_input:
-                selected = set(user_input.get("selected_zones_all", []))
+                selected = set(user_input.get("selected_zones_all", [])) & selectable_zone_ids
                 current_zones_by_entity = {zone.entity_id: zone for zone in config.zones}
                 config.zones = [
                     ZoneConfig(
@@ -501,15 +495,20 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                             ZoneConfig(item.entity_id),
                         ).quiet_excluded,
                     )
-                    for item in discover_media_players(self.hass.states.async_all())
+                    for item in selectable_zones
                 ]
             quiet = config.quiet
+            quiet_excluded_zone_ids = [
+                entity_id
+                for entity_id in user_input.get("quiet_excluded_zones", [])
+                if entity_id in selectable_zone_ids
+            ]
             config.quiet = QuietConfig(
                 enabled=quiet.enabled,
                 start=quiet.start,
                 end=quiet.end,
                 volume_multiplier=quiet.volume_multiplier,
-                excluded_zone_entity_ids=list(user_input.get("quiet_excluded_zones", [])),
+                excluded_zone_entity_ids=quiet_excluded_zone_ids,
                 zone_start=user_input.get("zone_start") or None,
                 zone_end=user_input.get("zone_end") or None,
             )
@@ -554,7 +553,11 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         fields[
             vol.Optional(
                 "selected_zones_all",
-                default=[zone.entity_id for zone in config.zones if zone.selected],
+                default=[
+                    zone.entity_id
+                    for zone in config.zones
+                    if zone.selected and zone.entity_id in selectable_zone_ids
+                ],
             )
         ] = selector.SelectSelector(
             selector.SelectSelectorConfig(
@@ -566,7 +569,11 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         fields[
             vol.Optional(
                 "quiet_excluded_zones",
-                default=list(config.quiet.excluded_zone_entity_ids),
+                default=[
+                    entity_id
+                    for entity_id in config.quiet.excluded_zone_entity_ids
+                    if entity_id in selectable_zone_ids
+                ],
             )
         ] = selector.SelectSelector(
             selector.SelectSelectorConfig(
@@ -668,6 +675,10 @@ def _options(records, *, include_entity_id: bool = False) -> list[selector.Selec
             label = f"{record.name} ({record.entity_id})"
         options.append(selector.SelectOptionDict(value=record.entity_id, label=label))
     return options
+
+
+def _selectable_announcement_zones(records) -> list:
+    return [record for record in records if is_selectable_announcement_player(record)]
 
 
 def _speaker_drift_placeholders(config: AnnouncementConfig, discovered_zones) -> dict[str, str]:

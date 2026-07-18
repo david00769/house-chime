@@ -8,12 +8,16 @@ import logging
 from typing import Any
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
+from .discovery import (
+    DiscoveredEntity,
+    UNAVAILABLE_STATES,
+    has_music_assistant_announcement_features,
+    is_music_assistant_announcement_player,
+)
 from .media import LOCAL_MEDIA_PREFIX
 from .models import AnnouncementResolution
 
 _LOGGER = logging.getLogger(__name__)
-
-UNAVAILABLE_STATES = {"unavailable", "unknown"}
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,6 +185,19 @@ def _incompatible_music_assistant_targets(hass: Any, entity_ids: list[str]) -> l
             continue
         if state.state in UNAVAILABLE_STATES:
             incompatible.append(f"{entity_id}:{state.state}")
+            continue
+        attributes = dict(state.attributes or {})
+        record = DiscoveredEntity(
+            entity_id=entity_id,
+            name=str(attributes.get("friendly_name") or entity_id),
+            state=state.state,
+            attributes=attributes,
+        )
+        if not is_music_assistant_announcement_player(record):
+            incompatible.append(f"{entity_id}:not_music_assistant")
+            continue
+        if not has_music_assistant_announcement_features(record):
+            incompatible.append(f"{entity_id}:missing_announcement_features")
             continue
     return incompatible
 

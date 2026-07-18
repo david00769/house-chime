@@ -16,7 +16,7 @@ After adding the integration, open `Configure`. House Chime walks through:
 
 - `People`: select Home Assistant people.
 - `Priority`: rank the selected people.
-- `Speakers`: select recommended Music Assistant/Juke targets.
+- `Speakers`: select available Music Assistant announcement targets.
 - `Sounds`: choose uploaded announcement and chime audio.
 - `Events`: enable Approach, Package, and Doorbell and choose voices.
 - `Quiet rules`: configure quiet hours and quiet volume.
@@ -67,6 +67,9 @@ unreachable Local Media URLs, missing media, missing zones, and a missing Music
 Assistant service are intended to show there. Incompatible speaker selections
 also show there. For Music Assistant playback, select media players that support
 Music Assistant announcements rather than Juke-native zone/control entities.
+For Juke Audio AirPlay2 zones, select the Music Assistant-presented
+`media_player` entities. House Chime hides unavailable players and raw
+input/control entities that cannot be passed to `music_assistant.play_announcement`.
 
 If a Repair says a selected speaker is missing or incompatible after a Home
 Assistant, Music Assistant, restore, or device rediscovery event, re-open

@@ -10,11 +10,25 @@ from custom_components.house_chime.const import CONF_ACTIVE_CONFIG, DEFAULT_EVEN
 from custom_components.house_chime.models import AnnouncementConfig, PersonConfig, ZoneConfig
 from conftest import FakeState, make_fake_hass
 
+ANNOUNCEMENT_FEATURES = 512 | 1048576
+
 
 def make_options_flow(entry: SimpleNamespace) -> HouseChimeOptionsFlow:
     flow = HouseChimeOptionsFlow()
     flow.config_entry = entry
     return flow
+
+
+def ma_attrs(extra: dict | None = None) -> dict:
+    attributes = {
+        "app_id": "music_assistant",
+        "source": "Music Assistant Queue",
+        "mass_player_type": "player",
+        "supported_features": ANNOUNCEMENT_FEATURES,
+    }
+    if extra:
+        attributes.update(extra)
+    return attributes
 
 
 def test_config_flow_creates_seeded_house_chime_entry() -> None:
@@ -234,25 +248,50 @@ def test_options_flow_quiet_step_keeps_quiet_zone_rules_in_additional_settings()
     assert quiet["zone_start"] == "21:00"
 
 
-def test_options_flow_zones_prioritizes_recommended_music_assistant_players() -> None:
+def test_options_flow_zones_shows_available_juke_airplay2_music_assistant_targets() -> None:
     entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: AnnouncementConfig().to_dict()}, options={})
     flow = make_options_flow(entry)
     flow.hass = make_fake_hass(
         [
             FakeState(
-                "media_player.tv",
+                "media_player.main_floor_2",
                 "idle",
-                "TV",
-                {
-                    "app_id": "music_assistant",
-                    "source": "Music Assistant Queue",
-                    "mass_player_type": "player",
-                },
+                "Main Floor",
+                ma_attrs(),
             ),
             FakeState(
-                "media_player.sugarloaf_great_room_juke_zone",
+                "media_player.upper_level_airplay",
                 "idle",
-                "Sugarloaf Great Room Juke Zone",
+                "Upper Level",
+                ma_attrs(),
+            ),
+            FakeState(
+                "media_player.whole_house",
+                "idle",
+                "Whole House (AirPlay)",
+                ma_attrs(),
+            ),
+            FakeState(
+                "media_player.master",
+                "idle",
+                "Master Bedroom (AirPlay)",
+                ma_attrs(),
+            ),
+            FakeState(
+                "media_player.main_floor_airplay",
+                "unavailable",
+                "Main Floor (AirPlay)",
+                ma_attrs(),
+            ),
+            FakeState(
+                "media_player.sugarloaf_juke_main_floor_input",
+                "on",
+                "Sugarloaf Juke Main Floor Input",
+                {
+                    "device_class": "receiver",
+                    "source": "Airplay2",
+                    "supported_features": 2432,
+                },
             ),
         ]
     )
@@ -261,10 +300,15 @@ def test_options_flow_zones_prioritizes_recommended_music_assistant_players() ->
     selected_field = next(iter(result["data_schema"].schema.values()))
     options = selected_field.config.kwargs["options"]
 
-    assert [option["value"] for option in options] == ["media_player.sugarloaf_great_room_juke_zone"]
+    assert [option["value"] for option in options] == [
+        "media_player.main_floor_2",
+        "media_player.master",
+        "media_player.upper_level_airplay",
+        "media_player.whole_house",
+    ]
     assert result["description_placeholders"] == {
-        "recommended_count": "1",
-        "total_count": "2",
+        "recommended_count": "4",
+        "total_count": "6",
         "missing_selected_zones": "None.",
         "suggested_replacements": "None.",
     }
@@ -276,14 +320,16 @@ def test_options_flow_zones_labels_include_entity_ids() -> None:
     flow.hass = make_fake_hass(
         [
             FakeState(
-                "media_player.sugarloaf_living_room_juke_zone",
+                "media_player.whole_house",
                 "idle",
                 "Whole House",
+                ma_attrs(),
             ),
             FakeState(
-                "media_player.sugarloaf_great_room_juke_zone",
+                "media_player.whole_house_airplay",
                 "idle",
                 "Whole House",
+                ma_attrs(),
             ),
         ]
     )
@@ -293,8 +339,8 @@ def test_options_flow_zones_labels_include_entity_ids() -> None:
     options = selected_field.config.kwargs["options"]
 
     assert [option["label"] for option in options] == [
-        "Whole House (media_player.sugarloaf_great_room_juke_zone)",
-        "Whole House (media_player.sugarloaf_living_room_juke_zone)",
+        "Whole House (media_player.whole_house)",
+        "Whole House (media_player.whole_house_airplay)",
     ]
 
 
@@ -321,13 +367,13 @@ def test_options_flow_zones_surfaces_missing_selected_speaker_suggestions() -> N
                 "media_player.great_room",
                 "idle",
                 "Great Room",
-                {"mass_player_id": "great_room"},
+                ma_attrs({"mass_player_id": "great_room"}),
             ),
             FakeState(
                 "media_player.living_room_3",
                 "idle",
                 "Whole House",
-                {"mass_player_id": "living_room_3"},
+                ma_attrs({"mass_player_id": "living_room_3"}),
             ),
         ]
     )
@@ -347,22 +393,70 @@ def test_options_flow_zones_surfaces_missing_selected_speaker_suggestions() -> N
     )
 
 
-def test_options_flow_zones_keeps_full_media_player_list_in_additional_settings() -> None:
+def test_options_flow_zones_does_not_offer_unavailable_saved_speakers() -> None:
+    config = AnnouncementConfig(
+        zones=[
+            ZoneConfig(
+                entity_id="media_player.main_floor_airplay",
+                name="Main Floor (AirPlay)",
+                selected=True,
+            ),
+        ],
+    )
+    entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: config.to_dict()}, options={})
+    flow = make_options_flow(entry)
+    flow.hass = make_fake_hass(
+        [
+            FakeState(
+                "media_player.main_floor_airplay",
+                "unavailable",
+                "Main Floor (AirPlay)",
+                ma_attrs(),
+            ),
+            FakeState(
+                "media_player.main_floor_2",
+                "idle",
+                "Main Floor",
+                ma_attrs(),
+            ),
+        ]
+    )
+
+    result = asyncio.run(flow.async_step_zones())
+    selected_field_marker = next(iter(result["data_schema"].schema.keys()))
+    selected_field = next(iter(result["data_schema"].schema.values()))
+    options = selected_field.config.kwargs["options"]
+
+    assert selected_field_marker.default() == []
+    assert [option["value"] for option in options] == ["media_player.main_floor_2"]
+    assert result["description_placeholders"]["missing_selected_zones"] == (
+        "Main Floor (AirPlay) (media_player.main_floor_airplay)"
+    )
+    assert result["description_placeholders"]["suggested_replacements"] == (
+        "Main Floor (AirPlay) (media_player.main_floor_airplay) -> "
+        "Main Floor (media_player.main_floor_2)"
+    )
+
+
+def test_options_flow_zones_filters_additional_settings_to_compatible_targets() -> None:
     entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: AnnouncementConfig().to_dict()}, options={})
     flow = make_options_flow(entry)
     flow.hass = make_fake_hass(
         [
             FakeState("media_player.tv", "idle", "TV"),
-            FakeState("media_player.radio", "idle", "Radio"),
+            FakeState("media_player.radio", "unavailable", "Radio", ma_attrs()),
+            FakeState("media_player.main_floor_2", "idle", "Main Floor", ma_attrs()),
         ]
     )
 
     zones_result = asyncio.run(flow.async_step_zones())
     zones_field = next(iter(zones_result["data_schema"].schema.values()))
-    assert zones_field.config.kwargs["options"] == []
+    assert [option["value"] for option in zones_field.config.kwargs["options"]] == [
+        "media_player.main_floor_2"
+    ]
     assert zones_result["description_placeholders"] == {
-        "recommended_count": "0",
-        "total_count": "2",
+        "recommended_count": "1",
+        "total_count": "3",
         "missing_selected_zones": "None.",
         "suggested_replacements": "None.",
     }
@@ -374,8 +468,7 @@ def test_options_flow_zones_keeps_full_media_player_list_in_additional_settings(
     }
     all_zones_options = additional_fields["selected_zones_all"].config.kwargs["options"]
     assert [option["value"] for option in all_zones_options] == [
-        "media_player.radio",
-        "media_player.tv",
+        "media_player.main_floor_2",
     ]
 
 
@@ -389,7 +482,12 @@ def test_options_flow_additional_persists_fallbacks_duplicate_windows_and_person
     flow.hass = make_fake_hass(
         [
             FakeState("device_tracker.david_phone", "home", "David Phone"),
-            FakeState("media_player.great_room", "idle", "Great Room", {"mass_player_id": "great_room"}),
+            FakeState(
+                "media_player.great_room",
+                "idle",
+                "Great Room",
+                ma_attrs({"mass_player_id": "great_room"}),
+            ),
         ]
     )
 

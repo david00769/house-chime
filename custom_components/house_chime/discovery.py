@@ -5,6 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
+from .const import STATE_UNAVAILABLE, STATE_UNKNOWN
+
+UNAVAILABLE_STATES = {STATE_UNAVAILABLE, STATE_UNKNOWN}
+MUSIC_ASSISTANT_APP_ID = "music_assistant"
+MUSIC_ASSISTANT_QUEUE_SOURCE = "music assistant queue"
+MUSIC_ASSISTANT_TARGET_FEATURES = (512, 1048576)
+
 
 @dataclass(frozen=True, slots=True)
 class DiscoveredEntity:
@@ -41,46 +48,57 @@ def discover_media_players(states: Iterable[Any]) -> list[DiscoveredEntity]:
 
 
 def is_recommended_media_player(record: DiscoveredEntity) -> bool:
-    """Return true for likely Music Assistant/Juke announcement targets."""
+    """Return true for selectable Music Assistant announcement targets."""
 
-    if is_music_assistant_announcement_player(record):
-        return True
+    return is_selectable_announcement_player(record)
 
-    haystack = " ".join(
-        [
-            record.entity_id,
-            record.name,
-            " ".join(str(key) for key in record.attributes),
-            " ".join(str(value) for value in record.attributes.values()),
-        ]
-    ).lower()
-    return any(
-        token in haystack
-        for token in (
-            "announcement",
-        )
+
+def is_selectable_announcement_player(record: DiscoveredEntity) -> bool:
+    """Return true when House Chime can expose the player for selection."""
+
+    return (
+        is_available_media_player(record)
+        and is_music_assistant_announcement_player(record)
+        and has_music_assistant_announcement_features(record)
     )
 
 
-def is_music_assistant_announcement_player(record: DiscoveredEntity) -> bool:
-    """Return true when the player satisfies Music Assistant announcement target features."""
+def is_available_media_player(record: DiscoveredEntity) -> bool:
+    """Return true when the media player exists and is currently usable."""
 
-    # Generic Music Assistant proxy players expose broad metadata such as
-    # `app_id=music_assistant`, `source=Music Assistant Queue`, and
-    # `mass_player_type=player`. That metadata alone is too broad for the
-    # curated picker, because it includes TVs, HomePods, computers, and stale
-    # AirPlay bridges. Keep this recommendation focused on explicit Juke or
-    # announcement-flavored targets; the full media-player picker remains
-    # available for recovery and unusual deployments.
-    haystack = " ".join(
-        [
-            record.entity_id,
-            record.name,
-            " ".join(str(key) for key in record.attributes),
-            " ".join(str(value) for value in record.attributes.values()),
-        ]
-    ).lower()
-    return any(token in haystack for token in ("juke", "announcement"))
+    return _normalise(record.state) not in UNAVAILABLE_STATES
+
+
+def is_music_assistant_announcement_player(record: DiscoveredEntity) -> bool:
+    """Return true when the player is owned or presented by Music Assistant."""
+
+    attributes = record.attributes
+    app_id = _normalise(attributes.get("app_id"))
+    app_name = _normalise(attributes.get("app_name"))
+    source = _normalise(attributes.get("source"))
+    mass_player_type = _normalise(attributes.get("mass_player_type"))
+
+    return (
+        app_id == MUSIC_ASSISTANT_APP_ID
+        or app_name == "music assistant"
+        or source == MUSIC_ASSISTANT_QUEUE_SOURCE
+        or mass_player_type == "player"
+        or "mass_player_id" in attributes
+    )
+
+
+def has_music_assistant_announcement_features(record: DiscoveredEntity) -> bool:
+    """Return true when Home Assistant reports Music Assistant target features."""
+
+    try:
+        supported_features = int(record.attributes.get("supported_features") or 0)
+    except (TypeError, ValueError):
+        supported_features = 0
+
+    return all(
+        supported_features & feature
+        for feature in MUSIC_ASSISTANT_TARGET_FEATURES
+    )
 
 
 def _discover_domain(states: Iterable[Any], domain: str) -> list[DiscoveredEntity]:
@@ -106,3 +124,7 @@ def _entity_id(state: Any) -> str:
 
 def _media_player_sort_key(record: DiscoveredEntity) -> tuple[int, str]:
     return (0 if is_recommended_media_player(record) else 1, record.entity_id)
+
+
+def _normalise(value: Any) -> str:
+    return str(value or "").strip().lower()

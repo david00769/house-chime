@@ -12,7 +12,7 @@ Assistant's `music_assistant.play_announcement` service.
 
 Tested playback path:
 
-- Juke Audio through Music Assistant
+- Juke Audio AirPlay2 zones through Music Assistant
 
 Other Music Assistant-backed speakers may work, but they are not tested yet.
 Native Sonos, Cast, AirPlay, DLNA, and generic `media_player.play_media` support
@@ -78,7 +78,7 @@ The setup flow is intentionally operator-focused:
 
 - `People`: choose Home Assistant `person.*` entities.
 - `Priority`: rank who should drive the active household context.
-- `Speakers`: choose recommended Music Assistant/Juke announcement targets.
+- `Speakers`: choose available Music Assistant announcement targets.
 - `Sounds`: select already-uploaded chime and announcement audio.
 - `Events`: enable and map voices for Approach, Package, and Doorbell.
 - `Quiet rules`: set quiet hours and quiet volume.
@@ -138,6 +138,11 @@ success.
 
 If the speaker selector shows several identical friendly names, use the entity
 ID suffix in the option label to distinguish the actual media players.
+
+For Juke Audio, select the AirPlay2 zone entities as Music Assistant presents
+them. Do not select raw Juke input/control entities or stale direct AirPlay
+entities; the House Chime selector hides unavailable players and entities that
+do not match Music Assistant's announcement target requirements.
 
 Music Assistant and Home Assistant can rename or recreate `media_player`
 entities after integration updates, device rediscovery, or restoring a backup.

@@ -11,6 +11,8 @@ from custom_components.house_chime.playback import (
     play_music_assistant_announcement,
 )
 
+ANNOUNCEMENT_FEATURES = 512 | 1048576
+
 
 class FakeState:
     def __init__(self, entity_id: str, state: str, attributes: dict) -> None:
@@ -25,12 +27,24 @@ class FakeStates:
             "media_player.great_room": FakeState(
                 "media_player.great_room",
                 "playing",
-                {"volume_level": 0.3, "source": "AirPlay", "supported_features": 512 | 1048576},
+                {
+                    "app_id": "music_assistant",
+                    "mass_player_type": "player",
+                    "volume_level": 0.3,
+                    "source": "Music Assistant Queue",
+                    "supported_features": ANNOUNCEMENT_FEATURES,
+                },
             ),
             "media_player.bedroom": FakeState(
                 "media_player.bedroom",
                 "idle",
-                {"volume_level": 0.2, "source": "Juke", "supported_features": 512 | 1048576},
+                {
+                    "app_id": "music_assistant",
+                    "mass_player_type": "player",
+                    "volume_level": 0.2,
+                    "source": "Music Assistant Queue",
+                    "supported_features": ANNOUNCEMENT_FEATURES,
+                },
             ),
         }
 
@@ -240,6 +254,38 @@ class PlaybackTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn(
             "incompatible_playback_targets:media_player.great_room:unavailable",
+            str(err.exception),
+        )
+        music_calls = [
+            call for call in hass.services.calls if call[0] == "music_assistant"
+        ]
+        self.assertEqual(music_calls, [])
+
+    async def test_playback_fails_before_music_assistant_for_raw_juke_targets(self) -> None:
+        hass = FakeHass()
+        hass.states._states["media_player.juke_input"] = FakeState(
+            "media_player.juke_input",
+            "on",
+            {
+                "friendly_name": "Sugarloaf Juke Main Floor Input",
+                "device_class": "receiver",
+                "source": "Airplay2",
+                "supported_features": 2432,
+            },
+        )
+        resolution = AnnouncementResolution(
+            event_id="front_door_doorbell",
+            ok=True,
+            media_path="media-source://media_source/local/announcements/voice.mp3",
+            target_player_entity_ids=["media_player.juke_input"],
+            volume_level=0.5,
+        )
+
+        with self.assertRaises(PlaybackMediaError) as err:
+            await play_music_assistant_announcement(hass, resolution)
+
+        self.assertIn(
+            "incompatible_playback_targets:media_player.juke_input:not_music_assistant",
             str(err.exception),
         )
         music_calls = [
