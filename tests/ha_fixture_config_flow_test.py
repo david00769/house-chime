@@ -110,7 +110,6 @@ def test_options_flow_init_uses_guided_setup_menu() -> None:
         "people",
         "priority",
         "zones",
-        "zones_all",
         "media",
         "events",
         "quiet",
@@ -438,6 +437,25 @@ def test_options_flow_zones_does_not_offer_unavailable_saved_speakers() -> None:
     )
 
 
+def test_options_flow_zones_all_alias_uses_single_speakers_form() -> None:
+    entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: AnnouncementConfig().to_dict()}, options={})
+    flow = make_options_flow(entry)
+    flow.hass = make_fake_hass(
+        [
+            FakeState("media_player.main_floor_2", "idle", "Main Floor", ma_attrs()),
+            FakeState("media_player.radio", "unavailable", "Radio", ma_attrs()),
+        ]
+    )
+
+    result = asyncio.run(flow.async_step_zones_all())
+    selected_field = next(iter(result["data_schema"].schema.values()))
+
+    assert result["step_id"] == "zones"
+    assert [option["value"] for option in selected_field.config.kwargs["options"]] == [
+        "media_player.main_floor_2"
+    ]
+
+
 def test_options_flow_zones_filters_additional_settings_to_compatible_targets() -> None:
     entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: AnnouncementConfig().to_dict()}, options={})
     flow = make_options_flow(entry)
@@ -466,8 +484,9 @@ def test_options_flow_zones_filters_additional_settings_to_compatible_targets() 
         getattr(field, "schema", field): validator
         for field, validator in additional_result["data_schema"].schema.items()
     }
-    all_zones_options = additional_fields["selected_zones_all"].config.kwargs["options"]
-    assert [option["value"] for option in all_zones_options] == [
+    assert "selected_zones_all" not in additional_fields
+    quiet_excluded_options = additional_fields["quiet_excluded_zones"].config.kwargs["options"]
+    assert [option["value"] for option in quiet_excluded_options] == [
         "media_player.main_floor_2",
     ]
 
@@ -565,3 +584,6 @@ def test_default_translated_labels_do_not_expose_raw_setup_keys() -> None:
         label for label in labels
         if any(raw in label for raw in forbidden)
     ]
+    assert "Speakers (Music Assistant)" not in labels
+    assert "Speakers (Compatible targets)" not in labels
+    assert "Compatible announcement speakers" not in labels

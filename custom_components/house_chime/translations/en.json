@@ -47,8 +47,7 @@
         "menu_options": {
           "people": "People",
           "priority": "Priority",
-          "zones": "Speakers (Music Assistant)",
-          "zones_all": "Speakers (Compatible targets)",
+          "zones": "Speakers",
           "media": "Sounds",
           "events": "Events",
           "quiet": "Quiet rules",
@@ -84,13 +83,6 @@
       "zones": {
         "title": "Speakers",
         "description": "Select available Music Assistant media_player targets that can use music_assistant.play_announcement. Compatible players shown: {recommended_count}. Total media players discovered: {total_count}. Unavailable players and raw source/control entities are hidden.\n\nMissing or unavailable saved speakers:\n{missing_selected_zones}\n\nSuggested current matches, for review only:\n{suggested_replacements}\n\nHouse Chime does not automatically replace missing speaker entity IDs. Select the current speaker you want before saving.",
-        "data": {
-          "selected_zones": "Announcement speakers"
-        }
-      },
-      "zones_all": {
-        "title": "Speakers (Compatible targets)",
-        "description": "Select from available Music Assistant media_player entities that match the play_announcement service target requirements. Compatible players shown: {recommended_count}. Total media players discovered: {total_count}. Unavailable players and raw source/control entities are hidden.\n\nMissing or unavailable saved speakers:\n{missing_selected_zones}\n\nSuggested current matches, for review only:\n{suggested_replacements}\n\nHouse Chime does not automatically replace missing speaker entity IDs. Select the current speaker you want before saving.",
         "data": {
           "selected_zones": "Announcement speakers"
         }
@@ -184,7 +176,6 @@
         "description": "Configure fallback trackers, duplicate suppression, quiet-zone exclusions, and per-person chime overrides.",
         "data": {
           "quiet_excluded_zones": "Quiet-zone excluded speakers",
-          "selected_zones_all": "Compatible announcement speakers",
           "zone_start": "Quiet-zone start",
           "zone_end": "Quiet-zone end",
           "front_door_approach_duplicate_window_seconds": "Approach duplicate window",

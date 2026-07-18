@@ -16,7 +16,6 @@ from .discovery import (
     discover_device_trackers,
     discover_media_players,
     discover_people,
-    is_recommended_media_player,
     is_selectable_announcement_player,
 )
 from .models import (
@@ -45,7 +44,6 @@ SETUP_MENU_OPTIONS = [
     "people",
     "priority",
     "zones",
-    "zones_all",
     "media",
     "events",
     "quiet",
@@ -246,56 +244,9 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         )
 
     async def async_step_zones_all(self, user_input: dict[str, Any] | None = None):
-        """Configure selected playback zones from all available Music Assistant targets."""
+        """Compatibility alias for older options links."""
 
-        config = self._config()
-        discovered_zones = discover_media_players(self.hass.states.async_all())
-        selectable_zones = _selectable_announcement_zones(discovered_zones)
-        zones_by_entity = {zone.entity_id: zone for zone in config.zones}
-        selectable_zone_ids = {zone.entity_id for zone in selectable_zones}
-        available_selected = [
-            zone.entity_id
-            for zone in config.zones
-            if zone.selected and zone.entity_id in selectable_zone_ids
-        ]
-        zone_options = _options(selectable_zones, include_entity_id=True)
-
-        if user_input is not None:
-            selected = set(user_input.get("selected_zones", [])) & selectable_zone_ids
-            config.zones = [
-                ZoneConfig(
-                    entity_id=item.entity_id,
-                    name=item.name,
-                    selected=item.entity_id in selected,
-                    quiet_excluded=zones_by_entity.get(item.entity_id, ZoneConfig(item.entity_id)).quiet_excluded,
-                )
-                for item in selectable_zones
-            ]
-            return self._save(config)
-
-        recommended_count = sum(1 for zone in selectable_zones if is_recommended_media_player(zone))
-        return self.async_show_form(
-            step_id="zones_all",
-            data_schema=vol.Schema(
-                {
-                    vol.Optional(
-                        "selected_zones",
-                        default=available_selected,
-                    ): selector.SelectSelector(
-                        selector.SelectSelectorConfig(
-                            options=zone_options,
-                            multiple=True,
-                            mode=selector.SelectSelectorMode.DROPDOWN,
-                        )
-                    ),
-                }
-            ),
-            description_placeholders={
-                "recommended_count": str(recommended_count),
-                "total_count": str(len(discovered_zones)),
-                **_speaker_drift_placeholders(config, selectable_zones),
-            },
-        )
+        return await self.async_step_zones(user_input)
 
     async def async_step_quiet(self, user_input: dict[str, Any] | None = None):
         """Configure quiet hours."""
@@ -550,22 +501,6 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             )
-        fields[
-            vol.Optional(
-                "selected_zones_all",
-                default=[
-                    zone.entity_id
-                    for zone in config.zones
-                    if zone.selected and zone.entity_id in selectable_zone_ids
-                ],
-            )
-        ] = selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=zone_options,
-                multiple=True,
-                mode=selector.SelectSelectorMode.DROPDOWN,
-            )
-        )
         fields[
             vol.Optional(
                 "quiet_excluded_zones",
