@@ -139,6 +139,12 @@ switches appear automatically on the integration device page. The bundled
 Lovelace example does not list them so it remains portable; add the generated
 switches to a household dashboard from the device page.
 
+Presence/listener status is live: it refreshes when a configured `person.*`
+entity or one of that person's configured fallback `device_tracker.*` entities
+changes state. Configure the same people and trusted fallback trackers that
+define the household's presence policy. House Chime deliberately does not read
+or infer presence from a Lovelace card, template, or dashboard label.
+
 `Selected target zones` reports the saved configured speaker list. It is not
 the same thing as the per-event resolved playback target list after quiet rules,
 duplicate suppression, unavailable speakers, or validation. Use the

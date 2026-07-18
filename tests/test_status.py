@@ -2,11 +2,17 @@ from __future__ import annotations
 
 import unittest
 
-from custom_components.house_chime.models import AnnouncementConfig, AnnouncementResolution, ZoneConfig
+from custom_components.house_chime.models import (
+    AnnouncementConfig,
+    AnnouncementResolution,
+    PersonConfig,
+    ZoneConfig,
+)
 from custom_components.house_chime.status import (
     SENSOR_DESCRIPTIONS,
     initial_status,
     record_resolution,
+    refresh_presence_status,
     status_entity_name,
     status_native_value,
 )
@@ -49,6 +55,47 @@ class StatusTest(unittest.TestCase):
         self.assertEqual(status["present_household_people"], ["david", "claudette"])
         self.assertEqual(status["playback_enabled_people"], ["david"])
         self.assertEqual(status["playback_disabled_people"], ["claudette"])
+
+    def test_presence_status_uses_live_person_and_tracker_states(self) -> None:
+        config = AnnouncementConfig(
+            people=[
+                PersonConfig(id="david", name="David", entity_id="person.david"),
+                PersonConfig(
+                    id="claudette",
+                    name="Claudette",
+                    entity_id="person.claudette",
+                    fallback_tracker_entity_ids=["device_tracker.claudette_phone"],
+                ),
+            ],
+            person_priority=["david", "claudette"],
+        )
+        status = initial_status(
+            config,
+            {
+                "person.david": "home",
+                "person.claudette": "unknown",
+                "device_tracker.claudette_phone": "home",
+            },
+        )
+
+        self.assertEqual(status["present_household_people"], ["david", "claudette"])
+        self.assertEqual(status["playback_enabled_people"], ["david", "claudette"])
+        self.assertEqual(status["active_household_context"], "david")
+
+        config.people[0].playback_enabled_when_home = False
+        config.people[1].playback_enabled_when_home = False
+        refresh_presence_status(
+            status,
+            config,
+            {
+                "person.david": "home",
+                "device_tracker.claudette_phone": "home",
+            },
+        )
+
+        self.assertEqual(status["playback_enabled_people"], [])
+        self.assertEqual(status["playback_disabled_people"], ["david", "claudette"])
+        self.assertIsNone(status["active_household_context"])
 
     def test_intentional_person_preference_suppression_is_not_a_failure(self) -> None:
         status = initial_status(AnnouncementConfig())

@@ -61,7 +61,7 @@ from .routes import (
     normalise_playback_routes,
     validate_playback_routes,
 )
-from .status import initial_status, record_resolution
+from .status import initial_status, record_resolution, refresh_presence_status
 from .storage import migrate_config_dict
 
 SERVICE_DISCOVER = "discover"
@@ -159,10 +159,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data[DOMAIN][entry.entry_id] = {
         "entry": entry,
         "config": config,
-        "status": initial_status(config),
+        "status": initial_status(config, _state_map(hass)),
         "last_resolution": None,
         "last_triggered_by_event": {},
     }
+    entry.async_on_unload(
+        hass.bus.async_listen(
+            "state_changed",
+            lambda event: _handle_presence_state_change(hass, entry.entry_id, event),
+        )
+    )
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
     _register_services(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -352,6 +358,8 @@ def _register_services(hass: HomeAssistant) -> None:
             call.data[CONF_PERSON_ID],
             call.data[CONF_PLAYBACK_ENABLED],
         )
+        if result["ok"]:
+            _refresh_presence_status(hass, data)
         _publish_status_updated(hass, data)
         return result
 
@@ -445,6 +453,44 @@ def _record_and_publish_status(
         outcome=outcome,
         has_music_assistant=has_music_assistant,
     )
+    _publish_status_updated(hass, data)
+
+
+def _state_map(hass: HomeAssistant) -> dict[str, str]:
+    """Return a small, serialisable snapshot of current Home Assistant states."""
+
+    return {state.entity_id: state.state for state in hass.states.async_all()}
+
+
+def _presence_entity_ids(config: AnnouncementConfig) -> set[str]:
+    """Return the presence entities that affect House Chime's live status."""
+
+    entity_ids = set()
+    for person in config.people:
+        if not person.in_scope:
+            continue
+        if person.entity_id:
+            entity_ids.add(person.entity_id)
+        entity_ids.update(person.fallback_tracker_entity_ids)
+    return entity_ids
+
+
+def _refresh_presence_status(hass: HomeAssistant, data: dict[str, Any]) -> None:
+    """Synchronise dashboard presence status with current Home Assistant state."""
+
+    refresh_presence_status(data["status"], data["config"], _state_map(hass))
+
+
+def _handle_presence_state_change(hass: HomeAssistant, entry_id: str, event: Any) -> None:
+    """Publish new presence data when a configured person or tracker changes."""
+
+    data = hass.data.get(DOMAIN, {}).get(entry_id)
+    if data is None:
+        return
+    entity_id = event.data.get("entity_id")
+    if entity_id not in _presence_entity_ids(data["config"]):
+        return
+    _refresh_presence_status(hass, data)
     _publish_status_updated(hass, data)
 
 

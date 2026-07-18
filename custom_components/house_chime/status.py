@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from .models import AnnouncementConfig, AnnouncementResolution
+from .resolver import resolve_household_presence
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,10 +61,13 @@ def status_native_value(key: str, value: Any) -> Any:
     return value
 
 
-def initial_status(config: AnnouncementConfig) -> dict[str, Any]:
+def initial_status(
+    config: AnnouncementConfig,
+    states: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Return initial status for a loaded integration entry."""
 
-    return {
+    status = {
         "integration_ready": True,
         "last_resolved_event": None,
         "last_played_event": None,
@@ -80,6 +84,27 @@ def initial_status(config: AnnouncementConfig) -> dict[str, Any]:
         "last_resolution_valid": False,
         "last_resolution": None,
     }
+    refresh_presence_status(status, config, states or {})
+    return status
+
+
+def refresh_presence_status(
+    status: dict[str, Any],
+    config: AnnouncementConfig,
+    states: dict[str, str],
+) -> None:
+    """Refresh dashboard presence values from the current entity states."""
+
+    present, enabled, disabled, active_context_id = resolve_household_presence(
+        config,
+        states,
+    )
+    status["present_household_people"] = present
+    status["playback_enabled_people"] = enabled
+    status["playback_disabled_people"] = disabled
+    status["active_household_context"] = (
+        active_context_id if present else config.default_context_id
+    )
 
 
 def record_resolution(

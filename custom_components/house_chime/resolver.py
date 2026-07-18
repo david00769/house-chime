@@ -13,6 +13,46 @@ from .const import STATE_HOME, STATE_UNAVAILABLE, STATE_UNKNOWN
 from .models import AnnouncementConfig, AnnouncementResolution, ResolverRuntime
 
 
+def resolve_household_presence(
+    config: AnnouncementConfig,
+    states: dict[str, str],
+) -> tuple[list[str], list[str], list[str], str | None]:
+    """Resolve configured household presence independently of an event.
+
+    Presence is used by both event resolution and dashboard status. Keeping it
+    separate prevents a dashboard from showing values left over from the last
+    announcement or from integration startup.
+    """
+
+    people = {person.id: person for person in config.people if person.in_scope}
+    present_person_ids = _present_person_ids(config, people, states)
+    enabled_person_ids = [
+        person_id
+        for person_id in present_person_ids
+        if getattr(people[person_id], "playback_enabled_when_home", True)
+    ]
+    disabled_person_ids = [
+        person_id for person_id in present_person_ids if person_id not in enabled_person_ids
+    ]
+
+    if present_person_ids and not enabled_person_ids:
+        active_context_id = None
+    else:
+        active_context_id = _active_context_id(
+            config,
+            people,
+            states,
+            allowed_person_ids=enabled_person_ids or None,
+        )
+
+    return (
+        present_person_ids,
+        enabled_person_ids,
+        disabled_person_ids,
+        active_context_id,
+    )
+
+
 def resolve_announcement(
     config: AnnouncementConfig,
     event_id: str,
@@ -49,15 +89,12 @@ def resolve_announcement(
         return resolution
 
     people = {person.id: person for person in config.people if person.in_scope}
-    present_person_ids = _present_person_ids(config, people, runtime.states)
-    enabled_person_ids = [
-        person_id
-        for person_id in present_person_ids
-        if getattr(people[person_id], "playback_enabled_when_home", True)
-    ]
-    disabled_person_ids = [
-        person_id for person_id in present_person_ids if person_id not in enabled_person_ids
-    ]
+    (
+        present_person_ids,
+        enabled_person_ids,
+        disabled_person_ids,
+        active_context_id,
+    ) = resolve_household_presence(config, runtime.states)
     resolution.present_person_ids = present_person_ids
     resolution.playback_enabled_person_ids = enabled_person_ids
     resolution.playback_disabled_person_ids = disabled_person_ids
@@ -69,12 +106,6 @@ def resolve_announcement(
         resolution.suppression_reason = "all_present_people_muted"
         return resolution
 
-    active_context_id = _active_context_id(
-        config,
-        people,
-        runtime.states,
-        allowed_person_ids=enabled_person_ids or None,
-    )
     resolution.active_context_id = active_context_id
 
     voice_id = None

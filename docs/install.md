@@ -43,6 +43,13 @@ is muted, it records an intentional `all_present_people_muted` suppression.
 The generated switches appear on the House Chime device page and can be added
 to any dashboard without hard-coding names into this public package.
 
+`People home`, `Enabled listeners home`, and `Muted listeners home` refresh
+whenever a configured person or that person's fallback device tracker changes
+state. To make these align with an existing household-presence policy, select
+the same Home Assistant people in `Household people` and add the same trusted
+trackers under each person's `Playback preferences`. House Chime does not use
+dashboard cards or their templates as an input.
+
 ## Upload Media
 
 House Chime does not upload or generate audio files. Use Home Assistant's
