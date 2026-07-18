@@ -65,6 +65,23 @@ set_speakers:
           domain: media_player
           multiple: true
 
+set_person_playback:
+  name: Set person playback preference
+  description: Enable or mute shared House Chime playback for one configured person while they are home.
+  fields:
+    person_id:
+      name: Person ID
+      description: The configured House Chime person ID.
+      required: true
+      selector:
+        text:
+    playback_enabled:
+      name: Playback enabled
+      description: When false, this person does not cause shared announcements to play while home.
+      required: true
+      selector:
+        boolean:
+
 set_playback_routes:
   name: Set playback source routes
   description: Replace saved source-routing rules that switch output zones to the selected announcement input before playback.

@@ -22,6 +22,10 @@ SENSOR_DESCRIPTIONS = (
     StatusEntityDescription("last_played_event", "Last played event", "mdi:speaker-message"),
     StatusEntityDescription("last_failed_event", "Last failed event", "mdi:alert-circle"),
     StatusEntityDescription("active_household_context", "Active household context", "mdi:account-home"),
+    StatusEntityDescription("present_household_people", "People home", "mdi:account-group"),
+    StatusEntityDescription("playback_enabled_people", "Enabled listeners home", "mdi:account-check"),
+    StatusEntityDescription("playback_disabled_people", "Muted listeners home", "mdi:account-off"),
+    StatusEntityDescription("last_suppression_reason", "Last suppression reason", "mdi:volume-off"),
     StatusEntityDescription("selected_target_zones", "Selected target zones", "mdi:speaker-multiple"),
     StatusEntityDescription("last_media_path", "Last media path", "mdi:file-music"),
     StatusEntityDescription("last_failure_reason", "Last failure reason", "mdi:alert"),
@@ -45,6 +49,10 @@ def status_native_value(key: str, value: Any) -> Any:
 
     if key == "selected_target_zones" and isinstance(value, list):
         return f"{len(value)} speakers selected"
+    if key == "present_household_people" and isinstance(value, list):
+        return f"{len(value)} people home"
+    if key in {"playback_enabled_people", "playback_disabled_people"} and isinstance(value, list):
+        return f"{len(value)} people"
     if key == "last_failure_reason" and isinstance(value, str) and len(value) > 255:
         return f"{value.split(':', 1)[0]} (see details)"
     if isinstance(value, list):
@@ -61,6 +69,10 @@ def initial_status(config: AnnouncementConfig) -> dict[str, Any]:
         "last_played_event": None,
         "last_failed_event": None,
         "active_household_context": config.default_context_id,
+        "present_household_people": [],
+        "playback_enabled_people": [],
+        "playback_disabled_people": [],
+        "last_suppression_reason": None,
         "selected_target_zones": [zone.entity_id for zone in config.zones if zone.selected],
         "last_media_path": None,
         "last_failure_reason": None,
@@ -82,15 +94,21 @@ def record_resolution(
     if has_music_assistant is not None:
         status["integration_ready"] = bool(has_music_assistant)
     status["last_resolved_event"] = resolution.event_id
-    if not resolution.suppressed:
+    if not resolution.suppressed or resolution.suppression_reason:
         status["active_household_context"] = resolution.active_context_id
         status["last_media_path"] = resolution.media_path
         status["quiet_mode_active"] = resolution.quiet_active
+    status["present_household_people"] = list(resolution.present_person_ids)
+    status["playback_enabled_people"] = list(resolution.playback_enabled_person_ids)
+    status["playback_disabled_people"] = list(resolution.playback_disabled_person_ids)
+    status["last_suppression_reason"] = resolution.suppression_reason
     status["last_resolution_valid"] = resolution.ok
     status["last_resolution"] = resolution.to_dict()
 
     if outcome == "played" and resolution.ok:
         status["last_played_event"] = resolution.event_id
+        status["last_failure_reason"] = None
+    elif outcome == "suppressed":
         status["last_failure_reason"] = None
     elif outcome == "failed" or not resolution.ok:
         status["last_failed_event"] = resolution.event_id

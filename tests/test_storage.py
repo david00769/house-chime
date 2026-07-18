@@ -10,7 +10,7 @@ class StorageTest(unittest.TestCase):
         migrated, changed = migrate_config_dict({})
 
         self.assertTrue(changed)
-        self.assertEqual(migrated["version"], 1)
+        self.assertEqual(migrated["version"], 2)
         self.assertEqual(migrated["people"], [])
         self.assertEqual(migrated["zones"], [])
         self.assertEqual(migrated["playback_routes"], [])
@@ -40,6 +40,18 @@ class StorageTest(unittest.TestCase):
 
         self.assertTrue(changed)
         self.assertNotIn("bridge_helper_entity_id", migrated["events"][0])
+
+    def test_migration_enables_existing_people_by_default(self) -> None:
+        migrated, changed = migrate_config_dict(
+            {
+                "version": 1,
+                "people": [{"id": "resident", "name": "Resident"}],
+            }
+        )
+
+        self.assertTrue(changed)
+        self.assertEqual(migrated["version"], 2)
+        self.assertTrue(migrated["people"][0]["playback_enabled_when_home"])
 
 
 if __name__ == "__main__":

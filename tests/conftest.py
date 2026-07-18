@@ -23,6 +23,7 @@ def _install_homeassistant_stubs() -> None:
     components = types.ModuleType("homeassistant.components")
     sensor_component = types.ModuleType("homeassistant.components.sensor")
     binary_sensor_component = types.ModuleType("homeassistant.components.binary_sensor")
+    switch_component = types.ModuleType("homeassistant.components.switch")
     core = types.ModuleType("homeassistant.core")
     const = types.ModuleType("homeassistant.const")
     helpers = types.ModuleType("homeassistant.helpers")
@@ -113,6 +114,9 @@ def _install_homeassistant_stubs() -> None:
     class BinarySensorEntity(EntityBase):
         pass
 
+    class SwitchEntity(EntityBase):
+        pass
+
     class HomeAssistant:
         pass
 
@@ -148,6 +152,7 @@ def _install_homeassistant_stubs() -> None:
     selector.MediaSelector = MediaSelector
     sensor_component.SensorEntity = SensorEntity
     binary_sensor_component.BinarySensorEntity = BinarySensorEntity
+    switch_component.SwitchEntity = SwitchEntity
     core.HomeAssistant = HomeAssistant
     core.SupportsResponse = SupportsResponse
     core.callback = callback
@@ -172,6 +177,7 @@ def _install_homeassistant_stubs() -> None:
     sys.modules["homeassistant.components"] = components
     sys.modules["homeassistant.components.sensor"] = sensor_component
     sys.modules["homeassistant.components.binary_sensor"] = binary_sensor_component
+    sys.modules["homeassistant.components.switch"] = switch_component
     sys.modules["homeassistant.core"] = core
     sys.modules["homeassistant.const"] = const
     sys.modules["homeassistant.helpers"] = helpers

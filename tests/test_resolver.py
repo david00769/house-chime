@@ -113,6 +113,59 @@ class ResolverTest(unittest.TestCase):
             ["media_player.great_room", "media_player.bedroom"],
         )
         self.assertEqual(resolution.volume_level, 0.8)
+        self.assertEqual(resolution.present_person_ids, ["david", "claudette"])
+        self.assertEqual(resolution.playback_enabled_person_ids, ["david", "claudette"])
+
+    def test_muted_priority_person_does_not_silence_enabled_person(self) -> None:
+        config = sample_config()
+        config.people[0].playback_enabled_when_home = False
+        runtime = ResolverRuntime(
+            states={
+                "person.david": "home",
+                "person.claudette": "home",
+                "media_player.great_room": "idle",
+                "media_player.bedroom": "idle",
+            },
+            available_media={
+                "media-source://media_source/local/announcements/pierce-package.mp3",
+            },
+        )
+
+        resolution = resolve_announcement(
+            config,
+            "front_door_package",
+            runtime,
+            now=datetime.fromisoformat("2026-05-15T14:00:00"),
+        )
+
+        self.assertTrue(resolution.ok)
+        self.assertFalse(resolution.suppressed)
+        self.assertEqual(resolution.active_context_id, "claudette")
+        self.assertEqual(resolution.playback_enabled_person_ids, ["claudette"])
+        self.assertEqual(resolution.playback_disabled_person_ids, ["david"])
+
+    def test_all_present_people_muted_is_an_intentional_suppression(self) -> None:
+        config = sample_config()
+        for person in config.people:
+            person.playback_enabled_when_home = False
+        runtime = ResolverRuntime(
+            states={
+                "person.david": "home",
+                "person.claudette": "home",
+            }
+        )
+
+        resolution = resolve_announcement(
+            config,
+            "front_door_package",
+            runtime,
+            now=datetime.fromisoformat("2026-05-15T14:00:00"),
+        )
+
+        self.assertTrue(resolution.ok)
+        self.assertTrue(resolution.suppressed)
+        self.assertEqual(resolution.suppression_reason, "all_present_people_muted")
+        self.assertEqual(resolution.playback_disabled_person_ids, ["david", "claudette"])
 
     def test_quiet_window_reduces_volume_and_excludes_quiet_zone(self) -> None:
         config = sample_config()

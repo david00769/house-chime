@@ -23,6 +23,7 @@ class PersonConfig:
     in_scope: bool = True
     default_voice_id: str | None = None
     custom_voice_profile: str | None = None
+    playback_enabled_when_home: bool = True
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "PersonConfig":
@@ -34,6 +35,7 @@ class PersonConfig:
             in_scope=bool(data.get("in_scope", True)),
             default_voice_id=data.get("default_voice_id"),
             custom_voice_profile=data.get("custom_voice_profile"),
+            playback_enabled_when_home=bool(data.get("playback_enabled_when_home", True)),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -45,6 +47,7 @@ class PersonConfig:
             "in_scope": self.in_scope,
             "default_voice_id": self.default_voice_id,
             "custom_voice_profile": self.custom_voice_profile,
+            "playback_enabled_when_home": self.playback_enabled_when_home,
         }
 
 
@@ -209,7 +212,7 @@ class QuietConfig:
 class AnnouncementConfig:
     """Durable operator-managed configuration."""
 
-    version: int = 1
+    version: int = 2
     people: list[PersonConfig] = field(default_factory=list)
     person_priority: list[str] = field(default_factory=list)
     default_context_id: str | None = None
@@ -274,6 +277,10 @@ class AnnouncementResolution:
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     active_context_id: str | None = None
+    present_person_ids: list[str] = field(default_factory=list)
+    playback_enabled_person_ids: list[str] = field(default_factory=list)
+    playback_disabled_person_ids: list[str] = field(default_factory=list)
+    suppression_reason: str | None = None
     voice_id: str | None = None
     media_path: str | None = None
     trigger_sound_path: str | None = None
@@ -290,6 +297,10 @@ class AnnouncementResolution:
             "errors": list(self.errors),
             "warnings": list(self.warnings),
             "active_context_id": self.active_context_id,
+            "present_person_ids": list(self.present_person_ids),
+            "playback_enabled_person_ids": list(self.playback_enabled_person_ids),
+            "playback_disabled_person_ids": list(self.playback_disabled_person_ids),
+            "suppression_reason": self.suppression_reason,
             "voice_id": self.voice_id,
             "media_path": self.media_path,
             "trigger_sound_path": self.trigger_sound_path,

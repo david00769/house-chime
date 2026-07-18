@@ -88,8 +88,7 @@ def test_options_flow_priority_step_preserves_rank_fields() -> None:
     result = asyncio.run(
         flow.async_step_priority(
             {
-                "priority_1": "scarlett",
-                "priority_2": "david",
+                "priority_people": ["scarlett", "david"],
                 "default_context_id": "david",
             }
         )
@@ -108,6 +107,8 @@ def test_options_flow_init_uses_guided_setup_menu() -> None:
 
     assert result["menu_options"] == [
         "people",
+        "preferences",
+        "personalisation",
         "priority",
         "zones",
         "media",
@@ -137,7 +138,7 @@ def test_options_flow_does_not_assign_home_assistant_config_entry_property() -> 
 
     flow = FlowWithReadOnlyConfigEntry()
 
-    assert flow._config().to_dict()["version"] == 1
+    assert flow._config().to_dict()["version"] == 2
 
 
 def test_options_flow_media_step_persists_media_selector_paths() -> None:
@@ -185,7 +186,7 @@ def test_options_flow_media_step_persists_media_selector_paths() -> None:
     )
 
 
-def test_options_flow_event_step_configures_one_event_with_friendly_fields() -> None:
+def test_options_flow_event_step_preserves_personalisation() -> None:
     config = AnnouncementConfig(
         people=[
             PersonConfig(id="david", name="David", entity_id="person.david"),
@@ -201,8 +202,6 @@ def test_options_flow_event_step_configures_one_event_with_friendly_fields() -> 
             {
                 "enabled": True,
                 "default_voice_id": "samantha",
-                "person_voice_1": "pierce",
-                "person_voice_2": "__none__",
             }
         )
     )
@@ -217,8 +216,57 @@ def test_options_flow_event_step_configures_one_event_with_friendly_fields() -> 
     )
     assert package["enabled"] is True
     assert package["default_voice_id"] == "samantha"
-    assert package["voice_by_context"] == {"david": "pierce"}
+    assert package["voice_by_context"] == {}
     assert approach["voice_by_context"] == {}
+
+
+def test_options_flow_person_preferences_and_personalisation_are_selected_by_person() -> None:
+    config = AnnouncementConfig(
+        people=[PersonConfig(id="resident", name="Resident", entity_id="person.resident")]
+    )
+    entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: config.to_dict()}, options={})
+    flow = make_options_flow(entry)
+    flow.hass = make_fake_hass([FakeState("device_tracker.resident_phone", "home", "Phone")])
+
+    preference_form = asyncio.run(flow.async_step_preferences({"person_id": "resident"}))
+    assert preference_form["step_id"] == "person_preference"
+    preference_result = asyncio.run(
+        flow.async_step_person_preference(
+            {
+                "playback_enabled_when_home": False,
+                "fallback_tracker_entity_ids": ["device_tracker.resident_phone"],
+            }
+        )
+    )
+    person = preference_result["data"][CONF_ACTIVE_CONFIG]["people"][0]
+    assert person["playback_enabled_when_home"] is False
+    assert person["fallback_tracker_entity_ids"] == ["device_tracker.resident_phone"]
+
+    personalisation_form = asyncio.run(
+        flow.async_step_personalisation(
+            {"person_id": "resident", "event_id": "front_door_package"}
+        )
+    )
+    assert personalisation_form["step_id"] == "personalisation_detail"
+    personalisation_result = asyncio.run(
+        flow.async_step_personalisation_detail(
+            {
+                "voice_id": "pierce",
+                "trigger_sound": {
+                    "media_content_id": "media-source://media_source/local/chimes/package.mp3"
+                },
+            }
+        )
+    )
+    package = next(
+        event
+        for event in personalisation_result["data"][CONF_ACTIVE_CONFIG]["events"]
+        if event["id"] == "front_door_package"
+    )
+    assert package["voice_by_context"] == {"resident": "pierce"}
+    assert package["trigger_sound_by_context"] == {
+        "resident": "media-source://media_source/local/chimes/package.mp3"
+    }
 
 
 def test_options_flow_quiet_step_keeps_quiet_zone_rules_in_additional_settings() -> None:
@@ -491,7 +539,7 @@ def test_options_flow_zones_filters_additional_settings_to_compatible_targets() 
     ]
 
 
-def test_options_flow_additional_persists_fallbacks_duplicate_windows_and_personal_chime() -> None:
+def test_options_flow_additional_persists_duplicate_windows_and_quiet_rules() -> None:
     config = AnnouncementConfig(
         people=[PersonConfig(id="david", name="David", entity_id="person.david")],
         zones=[ZoneConfig(entity_id="media_player.great_room", name="Great Room", selected=True)],
@@ -513,35 +561,22 @@ def test_options_flow_additional_persists_fallbacks_duplicate_windows_and_person
     result = asyncio.run(
         flow.async_step_additional(
             {
-                "david_fallback_trackers": ["device_tracker.david_phone"],
                 "quiet_excluded_zones": ["media_player.great_room"],
                 "zone_start": "21:00",
                 "zone_end": "07:00",
                 "front_door_approach_duplicate_window_seconds": 45,
                 "front_door_package_duplicate_window_seconds": 60,
                 "front_door_doorbell_duplicate_window_seconds": 45,
-                "front_door_approach_david_trigger_sound": {
-                    "media_content_id": "media-source://media_source/local/chimes/david.mp3"
-                },
-                "front_door_package_david_trigger_sound": "",
-                "front_door_doorbell_david_trigger_sound": "",
             }
         )
     )
 
     active_config = result["data"][CONF_ACTIVE_CONFIG]
-    assert active_config["people"][0]["fallback_tracker_entity_ids"] == [
-        "device_tracker.david_phone"
-    ]
     assert active_config["quiet"]["excluded_zone_entity_ids"] == ["media_player.great_room"]
     assert active_config["quiet"]["zone_start"] == "21:00"
     package = next(event for event in active_config["events"] if event["id"] == "front_door_package")
-    approach = next(event for event in active_config["events"] if event["id"] == "front_door_approach")
     assert "bridge_helper_entity_id" not in package
     assert package["duplicate_window_seconds"] == 60
-    assert approach["trigger_sound_by_context"] == {
-        "david": "media-source://media_source/local/chimes/david.mp3"
-    }
 
 
 def test_options_flow_review_reports_non_audible_setup_status() -> None:

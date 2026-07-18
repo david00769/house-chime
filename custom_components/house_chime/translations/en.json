@@ -43,9 +43,11 @@
     "step": {
       "init": {
         "title": "House Chime setup",
-        "description": "Configure people, priority, speakers, sounds, events, quiet rules, additional settings, and a dry-run review.",
+        "description": "Configure household presence, playback preferences, personalisation, speakers, sounds, events, quiet rules, and a dry-run review.",
         "menu_options": {
-          "people": "People",
+          "people": "Household people",
+          "preferences": "Playback preferences",
+          "personalisation": "Personalisation",
           "priority": "Priority",
           "zones": "Speakers",
           "media": "Sounds",
@@ -56,27 +58,58 @@
         }
       },
       "people": {
-        "title": "People",
-        "description": "Select the Home Assistant people House Chime should use for household context. Discovered people: {person_count}.",
+        "title": "Household people",
+        "description": "Select the Home Assistant people House Chime should use. Any discovered person can be configured; no household names are built into House Chime. Discovered people: {person_count}.",
         "data": {
           "selected_people": "People"
         },
         "data_description": {
-          "selected_people": "Only selected people are considered when House Chime chooses the active household context."
+          "selected_people": "Only selected people are considered for presence, personalisation, and shared-speaker playback preferences."
+        }
+      },
+      "preferences": {
+        "title": "Playback preferences",
+        "description": "Choose a household person to control whether shared announcements play while they are home.",
+        "data": {
+          "person_id": "Person"
+        }
+      },
+      "person_preference": {
+        "title": "Playback preference",
+        "description": "Configure at-home announcement playback for {person_name}.",
+        "data": {
+          "playback_enabled_when_home": "Play shared announcements while home",
+          "fallback_tracker_entity_ids": "Fallback presence trackers"
+        },
+        "data_description": {
+          "playback_enabled_when_home": "When all people currently home have this turned off, House Chime intentionally suppresses playback. A disabled person does not silence another enabled person."
+        }
+      },
+      "personalisation": {
+        "title": "Personalisation",
+        "description": "Choose a person and event to set their optional voice and pre-sound override.",
+        "data": {
+          "person_id": "Person",
+          "event_id": "Event"
+        }
+      },
+      "personalisation_detail": {
+        "title": "Personalisation",
+        "description": "Configure {person_name}'s optional personalisation for {event_name}.",
+        "data": {
+          "voice_id": "Voice override",
+          "trigger_sound": "Pre-sound override"
         }
       },
       "priority": {
         "title": "Priority",
-        "description": "Rank selected people. The first selected person who is home becomes the active household context.",
+        "description": "Rank selected people. The first enabled person who is home supplies personalisation for shared playback.",
         "data": {
-          "priority_1": "First priority",
-          "priority_2": "Second priority",
-          "priority_3": "Third priority",
-          "priority_4": "Fourth priority",
-          "priority_5": "Fifth priority",
+          "priority_people": "People in preference order",
           "default_context_id": "Fallback context"
         },
         "data_description": {
+          "priority_people": "Choose people in the order House Chime should prefer when more than one enabled person is home.",
           "default_context_id": "Used when none of the selected people are home."
         }
       },
@@ -119,41 +152,26 @@
       },
       "event_front_door_approach": {
         "title": "Approach",
-        "description": "Configure the Approach announcement.",
+        "description": "Configure the shared default for Approach. Per-person overrides are in Personalisation.",
         "data": {
           "enabled": "Enable Approach",
-          "default_voice_id": "Default voice",
-          "person_voice_1": "Voice for first selected person",
-          "person_voice_2": "Voice for second selected person",
-          "person_voice_3": "Voice for third selected person",
-          "person_voice_4": "Voice for fourth selected person",
-          "person_voice_5": "Voice for fifth selected person"
+          "default_voice_id": "Default voice"
         }
       },
       "event_front_door_package": {
         "title": "Package",
-        "description": "Configure the Package announcement.",
+        "description": "Configure the shared default for Package. Per-person overrides are in Personalisation.",
         "data": {
           "enabled": "Enable Package",
-          "default_voice_id": "Default voice",
-          "person_voice_1": "Voice for first selected person",
-          "person_voice_2": "Voice for second selected person",
-          "person_voice_3": "Voice for third selected person",
-          "person_voice_4": "Voice for fourth selected person",
-          "person_voice_5": "Voice for fifth selected person"
+          "default_voice_id": "Default voice"
         }
       },
       "event_front_door_doorbell": {
         "title": "Doorbell",
-        "description": "Configure the Doorbell announcement.",
+        "description": "Configure the shared default for Doorbell. Per-person overrides are in Personalisation.",
         "data": {
           "enabled": "Enable Doorbell",
-          "default_voice_id": "Default voice",
-          "person_voice_1": "Voice for first selected person",
-          "person_voice_2": "Voice for second selected person",
-          "person_voice_3": "Voice for third selected person",
-          "person_voice_4": "Voice for fourth selected person",
-          "person_voice_5": "Voice for fifth selected person"
+          "default_voice_id": "Default voice"
         }
       },
       "quiet": {
@@ -173,7 +191,7 @@
       },
       "additional": {
         "title": "Additional settings",
-        "description": "Configure fallback trackers, duplicate suppression, quiet-zone exclusions, and per-person chime overrides.",
+        "description": "Configure duplicate suppression, quiet-zone exclusions, and raw media paths. Per-person presence and sound settings are in Playback preferences and Personalisation.",
         "data": {
           "quiet_excluded_zones": "Quiet-zone excluded speakers",
           "zone_start": "Quiet-zone start",

@@ -6,6 +6,8 @@ CONF_ACTIVE_CONFIG = "active_config"
 CONF_ENTITY_IDS = "entity_ids"
 CONF_EVENT_ID = "event_id"
 CONF_PLAYBACK_ROUTES = "playback_routes"
+CONF_PERSON_ID = "person_id"
+CONF_PLAYBACK_ENABLED = "playback_enabled"
 CONF_SOURCE = "source"
 CONF_SKIP_DUPLICATE_SUPPRESSION = "skip_duplicate_suppression"
 CONF_TARGET_PLAYER_ENTITY_ID = "target_player_entity_id"
@@ -14,7 +16,7 @@ CONF_MEDIA_EXISTS = "media_exists"
 CONF_EVENT_TYPE = "event_type"
 
 DEFAULT_NAME = "House Chime"
-PLATFORMS = ["sensor", "binary_sensor", "event"]
+PLATFORMS = ["sensor", "binary_sensor", "event", "switch"]
 SIGNAL_STATUS_UPDATED = f"{DOMAIN}_status_updated"
 BUS_EVENT_STATUS_UPDATED = f"{DOMAIN}_status_updated"
 BUS_EVENT_ANNOUNCEMENT = f"{DOMAIN}_event"
@@ -22,11 +24,13 @@ BUS_EVENT_ANNOUNCEMENT = f"{DOMAIN}_event"
 ANNOUNCEMENT_EVENT_RESOLVED = "resolved"
 ANNOUNCEMENT_EVENT_PLAYED = "played"
 ANNOUNCEMENT_EVENT_PLAY_FAILED = "play_failed"
+ANNOUNCEMENT_EVENT_SUPPRESSED = "suppressed"
 
 ANNOUNCEMENT_EVENT_TYPES = (
     ANNOUNCEMENT_EVENT_RESOLVED,
     ANNOUNCEMENT_EVENT_PLAYED,
     ANNOUNCEMENT_EVENT_PLAY_FAILED,
+    ANNOUNCEMENT_EVENT_SUPPRESSED,
 )
 
 DEFAULT_NORMAL_VOLUME = 0.8

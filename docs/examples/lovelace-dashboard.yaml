@@ -9,7 +9,7 @@ views:
         content: |
           Use this page to check readiness, run silent dry runs, and manually test announcements.
 
-          Configuration belongs in Devices & Services, not on this operator dashboard.
+          Household playback controls are exposed as one House Chime switch per configured Home Assistant person. Add those generated switches from the House Chime device page; this generic example deliberately contains no household entity IDs.
 
       - type: entities
         title: Operator Status
@@ -17,7 +17,15 @@ views:
           - entity: binary_sensor.house_chime_integration_ready
             name: Ready
           - entity: sensor.house_chime_active_household_context
-            name: Active household context
+            name: Chosen listener
+          - entity: sensor.house_chime_people_home
+            name: People home
+          - entity: sensor.house_chime_enabled_listeners_home
+            name: Enabled listeners home
+          - entity: sensor.house_chime_muted_listeners_home
+            name: Muted listeners home
+          - entity: sensor.house_chime_last_suppression_reason
+            name: Last intentional suppression
           - entity: binary_sensor.house_chime_quiet_mode_active
             name: Quiet mode active
           - entity: sensor.house_chime_selected_target_zones

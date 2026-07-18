@@ -30,6 +30,9 @@ class StatusTest(unittest.TestCase):
             event_id="front_door_approach",
             ok=True,
             active_context_id="david",
+            present_person_ids=["david", "claudette"],
+            playback_enabled_person_ids=["david"],
+            playback_disabled_person_ids=["claudette"],
             media_path="media-source://media_source/local/announcements/front-door.mp3",
             target_player_entity_ids=["media_player.great_room"],
             quiet_active=True,
@@ -43,6 +46,26 @@ class StatusTest(unittest.TestCase):
         self.assertEqual(status["last_media_path"], "media-source://media_source/local/announcements/front-door.mp3")
         self.assertTrue(status["quiet_mode_active"])
         self.assertTrue(status["last_resolution_valid"])
+        self.assertEqual(status["present_household_people"], ["david", "claudette"])
+        self.assertEqual(status["playback_enabled_people"], ["david"])
+        self.assertEqual(status["playback_disabled_people"], ["claudette"])
+
+    def test_intentional_person_preference_suppression_is_not_a_failure(self) -> None:
+        status = initial_status(AnnouncementConfig())
+        resolution = AnnouncementResolution(
+            event_id="front_door_doorbell",
+            ok=True,
+            suppressed=True,
+            present_person_ids=["resident"],
+            playback_disabled_person_ids=["resident"],
+            suppression_reason="all_present_people_muted",
+        )
+
+        record_resolution(status, resolution, outcome="suppressed")
+
+        self.assertTrue(status["last_resolution_valid"])
+        self.assertIsNone(status["last_failure_reason"])
+        self.assertEqual(status["last_suppression_reason"], "all_present_people_muted")
 
     def test_record_resolution_keeps_configured_selected_zones_stable(self) -> None:
         config = AnnouncementConfig(

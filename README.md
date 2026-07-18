@@ -37,6 +37,7 @@ House Chime registers:
 - `house_chime.play`
 - `house_chime.set_speakers`
 - `house_chime.set_playback_routes`
+- `house_chime.set_person_playback`
 
 Use `resolve` for dry runs. Use `play` for manual announcements. Manual
 operator test buttons may pass `skip_duplicate_suppression: true` so repeated
@@ -101,22 +102,42 @@ Configure`.
 
 The setup flow is intentionally operator-focused:
 
-- `People`: choose Home Assistant `person.*` entities.
-- `Priority`: rank who should drive the active household context.
+- `Household people`: choose Home Assistant `person.*` entities. Any discovered
+  person can be configured; House Chime does not contain household names.
+- `Playback preferences`: choose a person and turn shared playback on or off
+  while they are home.
+- `Personalisation`: choose a person and event to set an optional voice or
+  pre-sound override.
+- `Priority`: rank enabled people who are home to choose the personalisation
+  used for shared playback.
 - `Speakers`: choose available Music Assistant announcement targets.
 - `Sounds`: select already-uploaded chime and announcement audio.
 - `Events`: enable and map voices for Approach, Package, and Doorbell.
 - `Quiet rules`: set quiet hours and quiet volume.
-- `Additional settings`: fallback trackers, duplicate windows, quiet-zone
-  exclusions, and per-person chime overrides.
+- `Additional settings`: duplicate windows, quiet-zone exclusions, and raw
+  advanced media settings.
 - `Review / Dry Run`: validate the setup without playing audio.
 
 Diagnostics remain available, but they are not part of the default setup path.
 
 Do not add House Chime configuration links or `Configure speakers` tiles to an
 operator dashboard. Dashboards should show readiness, saved speaker status,
-dry-run actions, and intentional play actions. Setup belongs in Home Assistant
+presence/listener status, generated per-person playback switches, dry-run
+actions, and intentional play actions. Setup belongs in Home Assistant
 `Settings -> Devices & services -> House Chime -> Configure`.
+
+When more than one person is home, House Chime plays once if any present person
+has playback enabled. It chooses the highest-priority enabled person for the
+voice and pre-sound. A muted person does not silence another enabled person. If
+all present people are muted, House Chime intentionally suppresses playback and
+records `all_present_people_muted` rather than a playback failure. When nobody
+is home, existing behavior is retained: House Chime resolves the configured
+fallback context and can still play.
+
+House Chime creates one playback switch for every configured person. The
+switches appear automatically on the integration device page. The bundled
+Lovelace example does not list them so it remains portable; add the generated
+switches to a household dashboard from the device page.
 
 `Selected target zones` reports the saved configured speaker list. It is not
 the same thing as the per-event resolved playback target list after quiet rules,

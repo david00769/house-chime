@@ -38,10 +38,10 @@ EVENT_LABELS = {
     "front_door_doorbell": "Doorbell",
 }
 
-PRIORITY_FIELDS = ("priority_1", "priority_2", "priority_3", "priority_4", "priority_5")
-
 SETUP_MENU_OPTIONS = [
     "people",
+    "preferences",
+    "personalisation",
     "priority",
     "zones",
     "media",
@@ -123,6 +123,9 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                         in_scope=True,
                         default_voice_id=existing.default_voice_id if existing else None,
                         custom_voice_profile=existing.custom_voice_profile if existing else None,
+                        playback_enabled_when_home=(
+                            existing.playback_enabled_when_home if existing else True
+                        ),
                     )
                 )
             config.people = people
@@ -151,22 +154,158 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
             },
         )
 
+    async def async_step_preferences(self, user_input: dict[str, Any] | None = None):
+        """Choose the person whose at-home preferences will be edited."""
+
+        config = self._config()
+        if user_input is not None:
+            self._preference_person_id = user_input["person_id"]
+            return await self.async_step_person_preference()
+        return self.async_show_form(
+            step_id="preferences",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("person_id"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(options=_person_options(config))
+                    )
+                }
+            ),
+        )
+
+    async def async_step_person_preference(self, user_input: dict[str, Any] | None = None):
+        """Edit one discovered person's playback preference and presence fallbacks."""
+
+        config = self._config()
+        person = _person_by_id(config, getattr(self, "_preference_person_id", None))
+        if person is None:
+            return await self.async_step_preferences()
+        tracker_options = _options(
+            discover_device_trackers(self.hass.states.async_all()), include_entity_id=True
+        )
+        if user_input is not None:
+            person.playback_enabled_when_home = bool(user_input["playback_enabled_when_home"])
+            person.fallback_tracker_entity_ids = _list_value(
+                user_input.get("fallback_tracker_entity_ids")
+            )
+            return self._save(config)
+        return self.async_show_form(
+            step_id="person_preference",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        "playback_enabled_when_home",
+                        default=person.playback_enabled_when_home,
+                    ): bool,
+                    vol.Optional(
+                        "fallback_tracker_entity_ids",
+                        default=list(person.fallback_tracker_entity_ids),
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=tracker_options,
+                            multiple=True,
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                }
+            ),
+            description_placeholders={"person_name": person.name},
+        )
+
+    async def async_step_personalisation(self, user_input: dict[str, Any] | None = None):
+        """Choose a person and event to personalise without numbered form fields."""
+
+        config = self._config()
+        if user_input is not None:
+            self._personalisation_person_id = user_input["person_id"]
+            self._personalisation_event_id = user_input["event_id"]
+            return await self.async_step_personalisation_detail()
+        event_options = [
+            selector.SelectOptionDict(value=event_id, label=_event_label(event_id))
+            for event_id in DEFAULT_EVENTS
+        ]
+        return self.async_show_form(
+            step_id="personalisation",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("person_id"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(options=_person_options(config))
+                    ),
+                    vol.Required("event_id"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(options=event_options)
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_personalisation_detail(
+        self, user_input: dict[str, Any] | None = None
+    ):
+        """Edit the selected person's voice and optional pre-sound for one event."""
+
+        config = self._config()
+        person = _person_by_id(config, getattr(self, "_personalisation_person_id", None))
+        event_id = getattr(self, "_personalisation_event_id", None)
+        event = next((item for item in config.events if item.id == event_id), None)
+        if person is None or event is None:
+            return await self.async_step_personalisation()
+        if user_input is not None:
+            voice_id = user_input.get("voice_id")
+            if voice_id and voice_id != NONE_VALUE:
+                event.voice_by_context[person.id] = voice_id
+            else:
+                event.voice_by_context.pop(person.id, None)
+            trigger_sound = _media_value(user_input.get("trigger_sound"))
+            if trigger_sound:
+                event.trigger_sound_by_context[person.id] = trigger_sound
+            else:
+                event.trigger_sound_by_context.pop(person.id, None)
+            return self._save(config)
+        return self.async_show_form(
+            step_id="personalisation_detail",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        "voice_id",
+                        default=event.voice_by_context.get(person.id, NONE_VALUE),
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                selector.SelectOptionDict(
+                                    value=NONE_VALUE, label="Use event default voice"
+                                )
+                            ]
+                            + _voice_options(config)
+                        )
+                    ),
+                    vol.Optional(
+                        "trigger_sound",
+                        default=_media_selector_default(
+                            event.trigger_sound_by_context.get(person.id)
+                        ),
+                    ): _media_selector(),
+                }
+            ),
+            description_placeholders={
+                "person_name": person.name,
+                "event_name": _event_label(event.id),
+            },
+        )
+
     async def async_step_priority(self, user_input: dict[str, Any] | None = None):
         """Configure active-context priority."""
 
         config = self._config()
-        person_options = [selector.SelectOptionDict(value=NONE_VALUE, label="None")]
-        person_options.extend(
-            selector.SelectOptionDict(value=person.id, label=person.name)
-            for person in config.people
-        )
+        person_options = _person_options(config)
+        fallback_options = [selector.SelectOptionDict(value=NONE_VALUE, label="None")]
+        fallback_options.extend(person_options)
 
         if user_input is not None:
-            ranked = []
-            for field in PRIORITY_FIELDS:
-                person_id = user_input.get(field)
-                if person_id and person_id != NONE_VALUE and person_id not in ranked:
-                    ranked.append(person_id)
+            ranked = [
+                person_id
+                for person_id in user_input.get("priority_people", [])
+                if person_id in {person.id for person in config.people}
+            ]
+            ranked = list(dict.fromkeys(ranked))
             ranked.extend(person.id for person in config.people if person.id not in ranked)
             config.person_priority = ranked
             default_context_id = user_input.get("default_context_id")
@@ -175,17 +314,24 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
 
         fields = {
             vol.Optional(
-                field,
-                default=(config.person_priority[index] if index < len(config.person_priority) else NONE_VALUE),
-            ): selector.SelectSelector(selector.SelectSelectorConfig(options=person_options))
-            for index, field in enumerate(PRIORITY_FIELDS[: max(1, min(len(config.people), len(PRIORITY_FIELDS)))])
-        }
-        fields[
+                "priority_people",
+                default=[
+                    person_id
+                    for person_id in config.person_priority
+                    if person_id in {person.id for person in config.people}
+                ],
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=person_options,
+                    multiple=True,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
             vol.Optional(
                 "default_context_id",
                 default=config.default_context_id or NONE_VALUE,
-            )
-        ] = selector.SelectSelector(selector.SelectSelectorConfig(options=person_options))
+            ): selector.SelectSelector(selector.SelectSelectorConfig(options=fallback_options)),
+        }
 
         return self.async_show_form(
             step_id="priority",
@@ -305,7 +451,7 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         return await self._async_step_event_config("front_door_doorbell", user_input)
 
     async def _async_step_event_config(self, event_id: str, user_input: dict[str, Any] | None = None):
-        """Configure one event and its per-person voice selection."""
+        """Configure one event's shared default settings."""
 
         config = self._config()
         events_by_id = {event.id: event for event in config.events}
@@ -314,18 +460,12 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         step_id = f"event_{event_id}"
 
         if user_input is not None:
-            voice_by_context = {}
-            for index, person in enumerate(config.people):
-                field = _voice_person_field(index)
-                selected_voice = user_input.get(field)
-                if selected_voice and selected_voice != NONE_VALUE:
-                    voice_by_context[person.id] = selected_voice
             config.events = [
                 EventConfig(
                     id=existing.id,
                     name=existing.name,
                     enabled=bool(user_input["enabled"]),
-                    voice_by_context=voice_by_context,
+                    voice_by_context=dict(existing.voice_by_context),
                     default_voice_id=user_input.get("default_voice_id"),
                     common_trigger_sound=existing.common_trigger_sound,
                     trigger_sound_by_context=dict(existing.trigger_sound_by_context),
@@ -344,19 +484,6 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                 default=event.default_voice_id or "samantha",
             ): selector.SelectSelector(selector.SelectSelectorConfig(options=voice_options)),
         }
-        for index, person in enumerate(config.people):
-            fields[
-                vol.Optional(
-                    _voice_person_field(index),
-                    default=event.voice_by_context.get(person.id, NONE_VALUE),
-                )
-            ] = selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=[selector.SelectOptionDict(value=NONE_VALUE, label="Use default voice")]
-                    + voice_options
-                )
-            )
-
         return self.async_show_form(
             step_id=step_id,
             data_schema=vol.Schema(fields),
@@ -421,7 +548,6 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         """Configure additional fallbacks, duplicate windows, and raw overrides."""
 
         config = self._config()
-        tracker_options = _options(discover_device_trackers(self.hass.states.async_all()), include_entity_id=True)
         discovered_zones = discover_media_players(self.hass.states.async_all())
         selectable_zones = _selectable_announcement_zones(discovered_zones)
         selectable_zone_ids = {zone.entity_id for zone in selectable_zones}
@@ -429,10 +555,6 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         events_by_id = {event.id: event for event in config.events}
 
         if user_input is not None:
-            for person in config.people:
-                person.fallback_tracker_entity_ids = _list_value(
-                    user_input.get(_fallback_trackers_field(person.id))
-                )
             if "selected_zones_all" in user_input:
                 selected = set(user_input.get("selected_zones_all", [])) & selectable_zone_ids
                 current_zones_by_entity = {zone.entity_id: zone for zone in config.zones}
@@ -470,12 +592,6 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                 if _trigger_sound_field(event_id) in user_input:
                     event.common_trigger_sound = _media_value(user_input.get(_trigger_sound_field(event_id)))
                 event.duplicate_window_seconds = int(user_input[_duplicate_window_field(event_id)])
-                for person in config.people:
-                    value = _media_value(user_input.get(_trigger_sound_context_field(event_id, person.id)))
-                    if value:
-                        event.trigger_sound_by_context[person.id] = value
-                    else:
-                        event.trigger_sound_by_context.pop(person.id, None)
             for voice in config.voices:
                 for event_id in DEFAULT_EVENTS:
                     field = _media_field(voice.id, event_id)
@@ -488,19 +604,6 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
             return self._save(config)
 
         fields = {}
-        for person in config.people:
-            fields[
-                vol.Optional(
-                    _fallback_trackers_field(person.id),
-                    default=list(person.fallback_tracker_entity_ids),
-                )
-            ] = selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=tracker_options,
-                    multiple=True,
-                    mode=selector.SelectSelectorMode.DROPDOWN,
-                )
-            )
         fields[
             vol.Optional(
                 "quiet_excluded_zones",
@@ -528,15 +631,6 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                     default=event.duplicate_window_seconds,
                 )
             ] = vol.All(vol.Coerce(int), vol.Range(min=0, max=3600))
-            for person in config.people:
-                fields[
-                    vol.Optional(
-                        _trigger_sound_context_field(event_id, person.id),
-                        default=_media_selector_default(
-                            event.trigger_sound_by_context.get(person.id)
-                        ),
-                    )
-                ] = _media_selector()
             for voice in config.voices:
                 fields[
                     vol.Optional(
@@ -692,6 +786,20 @@ def _voice_options(config: AnnouncementConfig) -> list[selector.SelectOptionDict
     ]
 
 
+def _person_options(config: AnnouncementConfig) -> list[selector.SelectOptionDict]:
+    """Return current household people without encoding names in the form schema."""
+
+    return [
+        selector.SelectOptionDict(value=person.id, label=person.name)
+        for person in config.people
+        if person.in_scope
+    ]
+
+
+def _person_by_id(config: AnnouncementConfig, person_id: str | None) -> PersonConfig | None:
+    return next((person for person in config.people if person.id == person_id), None)
+
+
 def _id_from_entity(entity_id: str) -> str:
     return entity_id.split(".", 1)[-1]
 
@@ -700,24 +808,12 @@ def _voice_field(event_id: str, person_id: str) -> str:
     return f"{event_id}_{person_id}_voice_id"
 
 
-def _voice_person_field(index: int) -> str:
-    return f"person_voice_{index + 1}"
-
-
 def _media_field(voice_id: str, event_id: str) -> str:
     return f"{voice_id}_{event_id}_media_path"
 
 
 def _trigger_sound_field(event_id: str) -> str:
     return f"{event_id}_common_trigger_sound"
-
-
-def _trigger_sound_context_field(event_id: str, person_id: str) -> str:
-    return f"{event_id}_{person_id}_trigger_sound"
-
-
-def _fallback_trackers_field(person_id: str) -> str:
-    return f"{person_id}_fallback_trackers"
 
 
 def _duplicate_window_field(event_id: str) -> str:

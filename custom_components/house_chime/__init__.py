@@ -29,10 +29,13 @@ from .const import (
     ANNOUNCEMENT_EVENT_PLAY_FAILED,
     ANNOUNCEMENT_EVENT_PLAYED,
     ANNOUNCEMENT_EVENT_RESOLVED,
+    ANNOUNCEMENT_EVENT_SUPPRESSED,
     BUS_EVENT_STATUS_UPDATED,
     CONF_ACTIVE_CONFIG,
     CONF_ENTITY_IDS,
     CONF_EVENT_ID,
+    CONF_PERSON_ID,
+    CONF_PLAYBACK_ENABLED,
     CONF_PLAYBACK_ROUTES,
     CONF_SOURCE,
     CONF_SKIP_DUPLICATE_SUPPRESSION,
@@ -66,6 +69,7 @@ SERVICE_RESOLVE = "resolve"
 SERVICE_PLAY = "play"
 SERVICE_SET_SPEAKERS = "set_speakers"
 SERVICE_SET_PLAYBACK_ROUTES = "set_playback_routes"
+SERVICE_SET_PERSON_PLAYBACK = "set_person_playback"
 
 
 def _ensure_list(value: Any) -> list[Any]:
@@ -122,14 +126,35 @@ SET_PLAYBACK_ROUTES_SCHEMA = (
     else None
 )
 
+SET_PERSON_PLAYBACK_SCHEMA = (
+    vol.Schema(
+        {
+            vol.Required(CONF_PERSON_ID): cv.string,
+            vol.Required(CONF_PLAYBACK_ENABLED): cv.boolean,
+        }
+    )
+    if vol is not None and cv is not None
+    else None
+)
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up from a config entry."""
 
     hass.data.setdefault(DOMAIN, {})
-    config_dict, _ = migrate_config_dict(
-        entry.options.get(CONF_ACTIVE_CONFIG) or entry.data.get(CONF_ACTIVE_CONFIG)
+    configured_options = entry.options.get(CONF_ACTIVE_CONFIG)
+    config_dict, changed = migrate_config_dict(
+        configured_options or entry.data.get(CONF_ACTIVE_CONFIG)
     )
+    if changed:
+        if configured_options:
+            options = dict(entry.options)
+            options[CONF_ACTIVE_CONFIG] = config_dict
+            hass.config_entries.async_update_entry(entry, options=options)
+        else:
+            entry_data = dict(entry.data)
+            entry_data[CONF_ACTIVE_CONFIG] = config_dict
+            hass.config_entries.async_update_entry(entry, data=entry_data)
     config = AnnouncementConfig.from_dict(config_dict)
     hass.data[DOMAIN][entry.entry_id] = {
         "entry": entry,
@@ -177,6 +202,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             SERVICE_PLAY,
             SERVICE_SET_SPEAKERS,
             SERVICE_SET_PLAYBACK_ROUTES,
+            SERVICE_SET_PERSON_PLAYBACK,
         ):
             hass.services.async_remove(DOMAIN, service)
     return True
@@ -206,11 +232,12 @@ def _register_services(hass: HomeAssistant) -> None:
         data = _first_entry_data(hass)
         resolution = await _resolve_from_service_call(hass, data, call)
         data["last_resolution"] = resolution
-        _record_and_publish_status(hass, data, resolution, outcome="resolved")
+        outcome = "suppressed" if resolution.suppressed else "resolved"
+        _record_and_publish_status(hass, data, resolution, outcome=outcome)
         await async_create_resolution_issues(hass, resolution)
         fire_announcement_event(
             hass,
-            ANNOUNCEMENT_EVENT_RESOLVED,
+            ANNOUNCEMENT_EVENT_SUPPRESSED if resolution.suppressed else ANNOUNCEMENT_EVENT_RESOLVED,
             resolution,
             source="resolve",
         )
@@ -226,6 +253,15 @@ def _register_services(hass: HomeAssistant) -> None:
             fire_announcement_event(
                 hass,
                 ANNOUNCEMENT_EVENT_PLAY_FAILED,
+                resolution,
+                source="play",
+            )
+            return resolution.to_dict()
+        if resolution.suppressed:
+            _record_and_publish_status(hass, data, resolution, outcome="suppressed")
+            fire_announcement_event(
+                hass,
+                ANNOUNCEMENT_EVENT_SUPPRESSED,
                 resolution,
                 source="play",
             )
@@ -308,6 +344,17 @@ def _register_services(hass: HomeAssistant) -> None:
         _publish_status_updated(hass, data)
         return result
 
+    async def handle_set_person_playback(call: ServiceCall) -> dict[str, Any]:
+        data = _first_entry_data(hass)
+        result = _set_person_playback(
+            hass,
+            data,
+            call.data[CONF_PERSON_ID],
+            call.data[CONF_PLAYBACK_ENABLED],
+        )
+        _publish_status_updated(hass, data)
+        return result
+
     response_kwargs = {}
     if SupportsResponse is not None:
         response_kwargs["supports_response"] = SupportsResponse.OPTIONAL
@@ -332,6 +379,13 @@ def _register_services(hass: HomeAssistant) -> None:
         SERVICE_SET_PLAYBACK_ROUTES,
         handle_set_playback_routes,
         schema=SET_PLAYBACK_ROUTES_SCHEMA,
+        **response_kwargs,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_PERSON_PLAYBACK,
+        handle_set_person_playback,
+        schema=SET_PERSON_PLAYBACK_SCHEMA,
         **response_kwargs,
     )
     hass.services.async_register(
@@ -480,6 +534,30 @@ def _set_playback_routes(
     return {
         "ok": True,
         "playback_routes": [route.to_dict() for route in config.playback_routes],
+    }
+
+
+def _set_person_playback(
+    hass: HomeAssistant,
+    data: dict[str, Any],
+    person_id: str,
+    playback_enabled: bool,
+) -> dict[str, Any]:
+    """Persist a configured person's at-home playback preference."""
+
+    config: AnnouncementConfig = data["config"]
+    person = next((item for item in config.people if item.id == person_id), None)
+    if person is None:
+        return {
+            "ok": False,
+            "errors": [f"unknown_person:{person_id}"],
+        }
+    person.playback_enabled_when_home = bool(playback_enabled)
+    _persist_entry_config(hass, data, config)
+    return {
+        "ok": True,
+        "person_id": person.id,
+        "playback_enabled": person.playback_enabled_when_home,
     }
 
 

@@ -49,7 +49,32 @@ def resolve_announcement(
         return resolution
 
     people = {person.id: person for person in config.people if person.in_scope}
-    active_context_id = _active_context_id(config, people, runtime.states)
+    present_person_ids = _present_person_ids(config, people, runtime.states)
+    enabled_person_ids = [
+        person_id
+        for person_id in present_person_ids
+        if getattr(people[person_id], "playback_enabled_when_home", True)
+    ]
+    disabled_person_ids = [
+        person_id for person_id in present_person_ids if person_id not in enabled_person_ids
+    ]
+    resolution.present_person_ids = present_person_ids
+    resolution.playback_enabled_person_ids = enabled_person_ids
+    resolution.playback_disabled_person_ids = disabled_person_ids
+
+    # A shared speaker can only play once. If everyone present opts out, this
+    # is an intentional suppression, not a failed announcement.
+    if present_person_ids and not enabled_person_ids:
+        resolution.suppressed = True
+        resolution.suppression_reason = "all_present_people_muted"
+        return resolution
+
+    active_context_id = _active_context_id(
+        config,
+        people,
+        runtime.states,
+        allowed_person_ids=enabled_person_ids or None,
+    )
     resolution.active_context_id = active_context_id
 
     voice_id = None
@@ -134,8 +159,17 @@ def _active_context_id(
     config: AnnouncementConfig,
     people: dict[str, object],
     states: dict[str, str],
+    *,
+    allowed_person_ids: list[str] | None = None,
 ) -> str | None:
+    allowed = set(allowed_person_ids) if allowed_person_ids is not None else None
     priority = config.person_priority or list(people)
+    priority = [person_id for person_id in priority if allowed is None or person_id in allowed]
+    priority.extend(
+        person_id
+        for person_id in people
+        if person_id not in priority and (allowed is None or person_id in allowed)
+    )
     for person_id in priority:
         person = people.get(person_id)
         if person is None:
@@ -150,6 +184,29 @@ def _active_context_id(
     if config.default_context_id in people:
         return config.default_context_id
     return priority[0] if priority else None
+
+
+def _present_person_ids(
+    config: AnnouncementConfig,
+    people: dict[str, object],
+    states: dict[str, str],
+) -> list[str]:
+    """Return configured people currently detected at home in stable priority order."""
+
+    priority = config.person_priority or list(people)
+    priority = [person_id for person_id in priority if person_id in people]
+    priority.extend(person_id for person_id in people if person_id not in priority)
+    present = []
+    for person_id in priority:
+        person = people[person_id]
+        entity_ids = []
+        entity_id = getattr(person, "entity_id", None)
+        if entity_id:
+            entity_ids.append(entity_id)
+        entity_ids.extend(getattr(person, "fallback_tracker_entity_ids", []))
+        if any(states.get(entity_id) == STATE_HOME for entity_id in entity_ids):
+            present.append(person_id)
+    return present
 
 
 def _is_duplicate(

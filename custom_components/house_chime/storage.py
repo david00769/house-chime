@@ -6,7 +6,7 @@ from typing import Any
 
 from .const import DEFAULT_EVENTS, DEFAULT_VOICES
 
-CURRENT_CONFIG_VERSION = 1
+CURRENT_CONFIG_VERSION = 2
 
 DEFAULT_EVENT_NAMES = {
     "front_door_approach": "Front door approach",
@@ -41,11 +41,19 @@ def migrate_config_dict(data: dict[str, Any] | None) -> tuple[dict[str, Any], bo
             f"Unsupported House Chime config version {config['version']}"
         )
 
+    if config["version"] < 2:
+        config["version"] = 2
+        changed = True
+
     if config["version"] < CURRENT_CONFIG_VERSION:
         config["version"] = CURRENT_CONFIG_VERSION
         changed = True
 
     config.setdefault("people", [])
+    for person in config["people"]:
+        if "playback_enabled_when_home" not in person:
+            person["playback_enabled_when_home"] = True
+            changed = True
     config.setdefault("person_priority", [])
     config.setdefault("default_context_id", None)
     config.setdefault("zones", [])

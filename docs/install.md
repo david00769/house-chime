@@ -14,20 +14,34 @@
 
 After adding the integration, open `Configure`. House Chime walks through:
 
-- `People`: select Home Assistant people.
-- `Priority`: rank the selected people.
+- `Household people`: select Home Assistant people. The list is discovered from
+  `person.*`; House Chime does not hard-code household names.
+- `Playback preferences`: select any configured person and choose whether shared
+  playback is enabled while they are home.
+- `Personalisation`: select a person and event to configure their optional
+  voice and pre-sound override.
+- `Priority`: rank enabled people who are home to choose personalisation.
 - `Speakers`: select available Music Assistant announcement targets.
 - `Sounds`: choose uploaded announcement and chime audio.
 - `Events`: enable Approach, Package, and Doorbell and choose voices.
 - `Quiet rules`: configure quiet hours and quiet volume.
-- `Additional settings`: configure fallback trackers, duplicate windows,
-  quiet-zone exclusions, and per-person chime overrides.
+- `Additional settings`: configure duplicate windows, quiet-zone exclusions,
+  and raw advanced media paths.
 - `Review / Dry Run`: check the setup without playing audio.
 
 Keep configuration entry points out of operator dashboards. A House Chime
-dashboard may show readiness, configured speaker status, dry-run buttons, and
+dashboard may show readiness, configured speaker status, presence/listener
+status, generated per-person playback switches, dry-run buttons, and
 intentional audible test buttons, but `Configure speakers` tiles or direct
 configuration links belong in Devices & Services.
+
+Shared speakers cannot make a broadcast inaudible to one physical person. A
+person's playback switch means "do not use this person as a reason to play"
+while they are home. If another present person has playback enabled, House
+Chime plays once using that enabled person's personalisation. If everyone home
+is muted, it records an intentional `all_present_people_muted` suppression.
+The generated switches appear on the House Chime device page and can be added
+to any dashboard without hard-coding names into this public package.
 
 ## Upload Media
 
