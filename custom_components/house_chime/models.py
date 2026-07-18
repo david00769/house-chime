@@ -76,6 +76,30 @@ class ZoneConfig:
 
 
 @dataclass(slots=True)
+class PlaybackRouteConfig:
+    """Source route needed before playing to one announcement target."""
+
+    target_player_entity_id: str
+    source: str
+    zone_entity_ids: list[str] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "PlaybackRouteConfig":
+        return cls(
+            target_player_entity_id=str(data["target_player_entity_id"]),
+            source=str(data["source"]),
+            zone_entity_ids=list(data.get("zone_entity_ids", [])),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "target_player_entity_id": self.target_player_entity_id,
+            "source": self.source,
+            "zone_entity_ids": list(self.zone_entity_ids),
+        }
+
+
+@dataclass(slots=True)
 class VoicePersonality:
     """A named voice mapped to approved runtime media."""
 
@@ -190,6 +214,7 @@ class AnnouncementConfig:
     person_priority: list[str] = field(default_factory=list)
     default_context_id: str | None = None
     zones: list[ZoneConfig] = field(default_factory=list)
+    playback_routes: list[PlaybackRouteConfig] = field(default_factory=list)
     voices: list[VoicePersonality] = field(default_factory=list)
     events: list[EventConfig] = field(default_factory=list)
     quiet: QuietConfig = field(default_factory=QuietConfig)
@@ -205,6 +230,10 @@ class AnnouncementConfig:
             person_priority=list(data.get("person_priority", [])),
             default_context_id=data.get("default_context_id"),
             zones=[ZoneConfig.from_dict(item) for item in data.get("zones", [])],
+            playback_routes=[
+                PlaybackRouteConfig.from_dict(item)
+                for item in data.get("playback_routes", [])
+            ],
             voices=[VoicePersonality.from_dict(item) for item in data.get("voices", [])],
             events=[EventConfig.from_dict(item) for item in data.get("events", [])],
             quiet=QuietConfig.from_dict(data.get("quiet")),
@@ -218,6 +247,7 @@ class AnnouncementConfig:
             "person_priority": list(self.person_priority),
             "default_context_id": self.default_context_id,
             "zones": [item.to_dict() for item in self.zones],
+            "playback_routes": [item.to_dict() for item in self.playback_routes],
             "voices": [item.to_dict() for item in self.voices],
             "events": [item.to_dict() for item in self.events],
             "quiet": self.quiet.to_dict(),

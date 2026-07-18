@@ -33,7 +33,11 @@ from .const import (
     CONF_ACTIVE_CONFIG,
     CONF_ENTITY_IDS,
     CONF_EVENT_ID,
+    CONF_PLAYBACK_ROUTES,
+    CONF_SOURCE,
     CONF_SKIP_DUPLICATE_SUPPRESSION,
+    CONF_TARGET_PLAYER_ENTITY_ID,
+    CONF_ZONE_ENTITY_IDS,
     DOMAIN,
     PLATFORMS,
     SIGNAL_STATUS_UPDATED,
@@ -49,6 +53,11 @@ from .models import AnnouncementConfig, ResolverRuntime, ZoneConfig
 from .playback import PlaybackMediaError, play_music_assistant_announcement
 from .repairs import async_create_resolution_issues
 from .resolver import resolve_announcement
+from .routes import (
+    apply_playback_routes,
+    normalise_playback_routes,
+    validate_playback_routes,
+)
 from .status import initial_status, record_resolution
 from .storage import migrate_config_dict
 
@@ -56,6 +65,16 @@ SERVICE_DISCOVER = "discover"
 SERVICE_RESOLVE = "resolve"
 SERVICE_PLAY = "play"
 SERVICE_SET_SPEAKERS = "set_speakers"
+SERVICE_SET_PLAYBACK_ROUTES = "set_playback_routes"
+
+
+def _ensure_list(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    return [value]
+
 
 EVENT_SCHEMA = (
     vol.Schema(
@@ -75,6 +94,31 @@ SET_SPEAKERS_SCHEMA = (
         }
     )
     if vol is not None and cv is not None
+    else None
+)
+
+PLAYBACK_ROUTE_SCHEMA = (
+    vol.Schema(
+        {
+            vol.Required(CONF_TARGET_PLAYER_ENTITY_ID): cv.entity_id,
+            vol.Required(CONF_SOURCE): cv.string,
+            vol.Required(CONF_ZONE_ENTITY_IDS): cv.entity_ids,
+        }
+    )
+    if vol is not None and cv is not None
+    else None
+)
+
+SET_PLAYBACK_ROUTES_SCHEMA = (
+    vol.Schema(
+        {
+            vol.Required(CONF_PLAYBACK_ROUTES): vol.All(
+                _ensure_list,
+                [PLAYBACK_ROUTE_SCHEMA],
+            ),
+        }
+    )
+    if vol is not None and PLAYBACK_ROUTE_SCHEMA is not None
     else None
 )
 
@@ -132,6 +176,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             SERVICE_RESOLVE,
             SERVICE_PLAY,
             SERVICE_SET_SPEAKERS,
+            SERVICE_SET_PLAYBACK_ROUTES,
         ):
             hass.services.async_remove(DOMAIN, service)
     return True
@@ -197,6 +242,19 @@ def _register_services(hass: HomeAssistant) -> None:
                 source="play",
             )
             return resolution.to_dict()
+        route_errors = await apply_playback_routes(hass, data["config"], resolution)
+        if route_errors:
+            resolution.ok = False
+            resolution.errors.extend(route_errors)
+            _record_and_publish_status(hass, data, resolution, outcome="failed")
+            await async_create_resolution_issues(hass, resolution)
+            fire_announcement_event(
+                hass,
+                ANNOUNCEMENT_EVENT_PLAY_FAILED,
+                resolution,
+                source="play",
+            )
+            return resolution.to_dict()
         try:
             warnings = await play_music_assistant_announcement(hass, resolution)
         except PlaybackMediaError as err:
@@ -240,6 +298,16 @@ def _register_services(hass: HomeAssistant) -> None:
         _publish_status_updated(hass, data)
         return result
 
+    async def handle_set_playback_routes(call: ServiceCall) -> dict[str, Any]:
+        data = _first_entry_data(hass)
+        result = _set_playback_routes(
+            hass,
+            data,
+            call.data[CONF_PLAYBACK_ROUTES],
+        )
+        _publish_status_updated(hass, data)
+        return result
+
     response_kwargs = {}
     if SupportsResponse is not None:
         response_kwargs["supports_response"] = SupportsResponse.OPTIONAL
@@ -257,6 +325,13 @@ def _register_services(hass: HomeAssistant) -> None:
         SERVICE_SET_SPEAKERS,
         handle_set_speakers,
         schema=SET_SPEAKERS_SCHEMA,
+        **response_kwargs,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_PLAYBACK_ROUTES,
+        handle_set_playback_routes,
+        schema=SET_PLAYBACK_ROUTES_SCHEMA,
         **response_kwargs,
     )
     hass.services.async_register(
@@ -380,6 +455,31 @@ def _set_selected_speakers(
         "ok": True,
         "selected_target_zones": selected_target_zones,
         "available_target_entity_ids": list(selectable_by_entity),
+    }
+
+
+def _set_playback_routes(
+    hass: HomeAssistant,
+    data: dict[str, Any],
+    route_data: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Replace saved source routes used before announcement playback."""
+
+    config: AnnouncementConfig = data["config"]
+    routes, errors = normalise_playback_routes(route_data)
+    errors.extend(validate_playback_routes(hass, routes))
+    if errors:
+        return {
+            "ok": False,
+            "errors": errors,
+            "playback_routes": [route.to_dict() for route in config.playback_routes],
+        }
+
+    config.playback_routes = routes
+    _persist_entry_config(hass, data, config)
+    return {
+        "ok": True,
+        "playback_routes": [route.to_dict() for route in config.playback_routes],
     }
 
 

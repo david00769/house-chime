@@ -64,3 +64,24 @@ set_speakers:
         entity:
           domain: media_player
           multiple: true
+
+set_playback_routes:
+  name: Set playback source routes
+  description: Replace saved source-routing rules that switch output zones to the selected announcement input before playback.
+  fields:
+    playback_routes:
+      name: Playback routes
+      description: >
+        List of route objects. Each object needs target_player_entity_id, source,
+        and zone_entity_ids. The target must be a compatible Music Assistant
+        announcement player. Each zone must be an available media_player that can
+        select the requested source.
+      required: true
+      example:
+        - target_player_entity_id: media_player.whole_house
+          source: Whole House
+          zone_entity_ids:
+            - media_player.great_room_zone
+            - media_player.living_room_zone
+      selector:
+        object:

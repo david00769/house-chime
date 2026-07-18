@@ -34,6 +34,30 @@ entity IDs. It accepts multiple targets and persists the replacement only when
 every requested entity is a current compatible Music Assistant announcement
 target.
 
+Some whole-home audio systems separate announcement inputs from physical output
+zones. In that shape, selecting a Music Assistant target is not enough if the
+amplifier zone is still listening to a different source. Use
+`house_chime.set_playback_routes` to persist source-routing rules. Each route
+maps one selected announcement target to a source name and one or more output
+zones that must select that source before playback.
+
+Example service data:
+
+```yaml
+playback_routes:
+  - target_player_entity_id: media_player.whole_house
+    source: Whole House
+    zone_entity_ids:
+      - media_player.great_room_zone
+      - media_player.living_room_zone
+```
+
+House Chime validates route targets, output-zone availability, source-selection
+support, and requested source names before saving route config. During playback,
+it applies only the routes matching the resolved target players. If a saved
+route becomes stale, unavailable, or incompatible, the play service records a
+failure before calling Music Assistant instead of reporting a false success.
+
 ## Tested
 
 - Juke Audio AirPlay2 zones through Music Assistant

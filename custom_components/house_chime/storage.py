@@ -49,6 +49,7 @@ def migrate_config_dict(data: dict[str, Any] | None) -> tuple[dict[str, Any], bo
     config.setdefault("person_priority", [])
     config.setdefault("default_context_id", None)
     config.setdefault("zones", [])
+    config.setdefault("playback_routes", [])
     if not config.get("voices"):
         config["voices"] = [
             {

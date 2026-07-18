@@ -111,6 +111,25 @@ Use `house_chime.set_speakers` when the selected speaker list needs to be
 repaired through HA Services. It accepts multiple `media_player` entities and
 persists only currently compatible Music Assistant announcement targets.
 
+Use `house_chime.set_playback_routes` when compatible targets still need
+physical output zones switched to the matching input before audio is audible.
+This is common with whole-home amplifiers where Music Assistant plays to an
+input and separate media-player entities control which source each output zone
+hears. Route rules are validated before they are saved, and stale routes fail
+before playback so a play button does not report success while the amplifier is
+listening to the wrong source.
+
+Example route service data:
+
+```yaml
+playback_routes:
+  - target_player_entity_id: media_player.whole_house
+    source: Whole House
+    zone_entity_ids:
+      - media_player.great_room_zone
+      - media_player.living_room_zone
+```
+
 The `Review / Dry Run` configuration step performs the same kind of non-audible
 validation for all three built-in events.
 

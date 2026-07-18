@@ -13,6 +13,7 @@ class StorageTest(unittest.TestCase):
         self.assertEqual(migrated["version"], 1)
         self.assertEqual(migrated["people"], [])
         self.assertEqual(migrated["zones"], [])
+        self.assertEqual(migrated["playback_routes"], [])
         self.assertEqual([voice["id"] for voice in migrated["voices"]], ["eve", "leo", "pierce", "samantha"])
         self.assertEqual(
             [event["id"] for event in migrated["events"]],

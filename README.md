@@ -36,6 +36,7 @@ House Chime registers:
 - `house_chime.resolve`
 - `house_chime.play`
 - `house_chime.set_speakers`
+- `house_chime.set_playback_routes`
 
 Use `resolve` for dry runs. Use `play` for manual announcements. Manual
 operator test buttons may pass `skip_duplicate_suppression: true` so repeated
@@ -52,6 +53,15 @@ accepts a list of `media_player` entity IDs and persists only currently
 available Music Assistant announcement targets. Stale, unavailable, raw input,
 or non-Music-Assistant entities are rejected and the existing speaker selection
 is left unchanged.
+
+Use `set_playback_routes` when the audio system needs its physical output zones
+switched to the selected announcement input before Music Assistant plays. Each
+saved route maps one compatible announcement target to a source name and the
+output-zone entities that should select that source. For example, selecting a
+`media_player.whole_house` Music Assistant target can route several amplifier
+zones to source `Whole House` before playback. Route updates are validated
+against current Home Assistant state and are not persisted if a target, output
+zone, or requested source is unavailable or incompatible.
 
 House Chime also exposes purpose-specific automation conditions for readiness,
 event enablement, event resolution, and quiet mode, plus an Activity event
@@ -162,6 +172,13 @@ For Juke Audio, select the AirPlay2 zone entities as Music Assistant presents
 them. Do not select raw Juke input/control entities or stale direct AirPlay
 entities; the House Chime selector hides unavailable players and entities that
 do not match Music Assistant's announcement target requirements.
+
+If Juke output zones must be switched to the selected AirPlay2 input before
+audio is audible, configure playback routes with `house_chime.set_playback_routes`.
+Routes are generic data, not house-specific code: one route can map the selected
+Music Assistant target to a single output zone, and another can map a whole-house
+target to multiple output zones. House Chime applies only the routes for the
+targets selected in the current announcement.
 
 Music Assistant and Home Assistant can rename or recreate `media_player`
 entities after integration updates, device rediscovery, or restoring a backup.

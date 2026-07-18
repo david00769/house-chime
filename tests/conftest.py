@@ -133,6 +133,9 @@ def _install_homeassistant_stubs() -> None:
             return [value]
         return list(value)
 
+    def entity_id(value: Any) -> str:
+        return str(value)
+
     config_entries.ConfigFlow = ConfigFlow
     config_entries.OptionsFlow = OptionsFlow
     config_entries.ConfigEntry = ConfigEntry
@@ -150,6 +153,7 @@ def _install_homeassistant_stubs() -> None:
     core.callback = callback
     config_validation.string = str
     config_validation.boolean = bool
+    config_validation.entity_id = entity_id
     config_validation.entity_ids = entity_ids
     dispatcher.async_dispatcher_connect = async_dispatcher_connect
     dispatcher.async_dispatcher_send = async_dispatcher_send
