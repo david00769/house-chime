@@ -482,7 +482,23 @@ def _refresh_presence_status(hass: HomeAssistant, data: dict[str, Any]) -> None:
 
 
 def _handle_presence_state_change(hass: HomeAssistant, entry_id: str, event: Any) -> None:
-    """Publish new presence data when a configured person or tracker changes."""
+    """Schedule a presence refresh from any Home Assistant callback thread."""
+
+    entity_id = event.data.get("entity_id")
+    hass.loop.call_soon_threadsafe(
+        _refresh_presence_for_entity,
+        hass,
+        entry_id,
+        entity_id,
+    )
+
+
+def _refresh_presence_for_entity(
+    hass: HomeAssistant,
+    entry_id: str,
+    entity_id: str | None,
+) -> None:
+    """Publish presence state from Home Assistant's event-loop thread."""
 
     data = hass.data.get(DOMAIN, {}).get(entry_id)
     if data is None:
