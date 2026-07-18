@@ -28,6 +28,12 @@ The Speakers form may suggest current entities with similar names, but it does
 not auto-remap them. The operator must confirm the intended target by selecting
 it.
 
+For support workflows that need to repair speaker selection without opening the
+options form, call `house_chime.set_speakers` with the intended `media_player`
+entity IDs. It accepts multiple targets and persists the replacement only when
+every requested entity is a current compatible Music Assistant announcement
+target.
+
 ## Tested
 
 - Juke Audio AirPlay2 zones through Music Assistant

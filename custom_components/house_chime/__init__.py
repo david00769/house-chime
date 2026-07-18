@@ -29,7 +29,9 @@ from .const import (
     ANNOUNCEMENT_EVENT_PLAY_FAILED,
     ANNOUNCEMENT_EVENT_PLAYED,
     ANNOUNCEMENT_EVENT_RESOLVED,
+    BUS_EVENT_STATUS_UPDATED,
     CONF_ACTIVE_CONFIG,
+    CONF_ENTITY_IDS,
     CONF_EVENT_ID,
     CONF_SKIP_DUPLICATE_SUPPRESSION,
     DOMAIN,
@@ -40,9 +42,10 @@ from .discovery import (
     discover_device_trackers,
     discover_media_players,
     discover_people,
+    is_selectable_announcement_player,
 )
 from .media import async_available_media_for_resolution
-from .models import AnnouncementConfig, ResolverRuntime
+from .models import AnnouncementConfig, ResolverRuntime, ZoneConfig
 from .playback import PlaybackMediaError, play_music_assistant_announcement
 from .repairs import async_create_resolution_issues
 from .resolver import resolve_announcement
@@ -52,12 +55,23 @@ from .storage import migrate_config_dict
 SERVICE_DISCOVER = "discover"
 SERVICE_RESOLVE = "resolve"
 SERVICE_PLAY = "play"
+SERVICE_SET_SPEAKERS = "set_speakers"
 
 EVENT_SCHEMA = (
     vol.Schema(
         {
             vol.Required(CONF_EVENT_ID): cv.string,
             vol.Optional(CONF_SKIP_DUPLICATE_SUPPRESSION, default=False): cv.boolean,
+        }
+    )
+    if vol is not None and cv is not None
+    else None
+)
+
+SET_SPEAKERS_SCHEMA = (
+    vol.Schema(
+        {
+            vol.Required(CONF_ENTITY_IDS): cv.entity_ids,
         }
     )
     if vol is not None and cv is not None
@@ -74,6 +88,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     config = AnnouncementConfig.from_dict(config_dict)
     hass.data[DOMAIN][entry.entry_id] = {
+        "entry": entry,
         "config": config,
         "status": initial_status(config),
         "last_resolution": None,
@@ -112,7 +127,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return False
     hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     if not hass.data.get(DOMAIN):
-        for service in (SERVICE_DISCOVER, SERVICE_RESOLVE, SERVICE_PLAY):
+        for service in (
+            SERVICE_DISCOVER,
+            SERVICE_RESOLVE,
+            SERVICE_PLAY,
+            SERVICE_SET_SPEAKERS,
+        ):
             hass.services.async_remove(DOMAIN, service)
     return True
 
@@ -214,6 +234,12 @@ def _register_services(hass: HomeAssistant) -> None:
         )
         return resolution.to_dict()
 
+    async def handle_set_speakers(call: ServiceCall) -> dict[str, Any]:
+        data = _first_entry_data(hass)
+        result = _set_selected_speakers(hass, data, call.data[CONF_ENTITY_IDS])
+        _publish_status_updated(hass, data)
+        return result
+
     response_kwargs = {}
     if SupportsResponse is not None:
         response_kwargs["supports_response"] = SupportsResponse.OPTIONAL
@@ -224,6 +250,13 @@ def _register_services(hass: HomeAssistant) -> None:
         SERVICE_RESOLVE,
         handle_resolve,
         schema=EVENT_SCHEMA,
+        **response_kwargs,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_SPEAKERS,
+        handle_set_speakers,
+        schema=SET_SPEAKERS_SCHEMA,
         **response_kwargs,
     )
     hass.services.async_register(
@@ -283,5 +316,92 @@ def _record_and_publish_status(
         outcome=outcome,
         has_music_assistant=has_music_assistant,
     )
+    _publish_status_updated(hass, data)
+
+
+def _publish_status_updated(hass: HomeAssistant, data: dict[str, Any]) -> None:
+    """Notify status entities after their backing status dictionary changes."""
+
     if async_dispatcher_send is not None:
         async_dispatcher_send(hass, SIGNAL_STATUS_UPDATED)
+    hass.bus.async_fire(BUS_EVENT_STATUS_UPDATED, {"entry_id": _entry_id_for_data(hass, data)})
+
+
+def _set_selected_speakers(
+    hass: HomeAssistant,
+    data: dict[str, Any],
+    entity_ids: list[str],
+) -> dict[str, Any]:
+    """Replace selected announcement speakers with compatible live targets."""
+
+    config: AnnouncementConfig = data["config"]
+    requested = list(dict.fromkeys(str(entity_id) for entity_id in entity_ids))
+    selectable_zones = [
+        record
+        for record in discover_media_players(hass.states.async_all())
+        if is_selectable_announcement_player(record)
+    ]
+    selectable_by_entity = {record.entity_id: record for record in selectable_zones}
+    invalid = [
+        entity_id for entity_id in requested if entity_id not in selectable_by_entity
+    ]
+
+    if invalid:
+        return {
+            "ok": False,
+            "errors": [f"incompatible_speaker:{entity_id}" for entity_id in invalid],
+            "selected_target_zones": [
+                zone.entity_id for zone in config.zones if zone.selected
+            ],
+            "available_target_entity_ids": list(selectable_by_entity),
+        }
+
+    current_zones_by_entity = {zone.entity_id: zone for zone in config.zones}
+    selected = set(requested)
+    config.zones = [
+        ZoneConfig(
+            entity_id=record.entity_id,
+            name=record.name,
+            selected=record.entity_id in selected,
+            quiet_excluded=current_zones_by_entity.get(
+                record.entity_id,
+                ZoneConfig(record.entity_id),
+            ).quiet_excluded,
+        )
+        for record in selectable_zones
+    ]
+    selected_target_zones = [
+        zone.entity_id for zone in config.zones if zone.selected
+    ]
+    data["status"]["selected_target_zones"] = selected_target_zones
+    data["status"]["last_failure_reason"] = None
+    _persist_entry_config(hass, data, config)
+    return {
+        "ok": True,
+        "selected_target_zones": selected_target_zones,
+        "available_target_entity_ids": list(selectable_by_entity),
+    }
+
+
+def _persist_entry_config(
+    hass: HomeAssistant,
+    data: dict[str, Any],
+    config: AnnouncementConfig,
+) -> None:
+    """Persist changed House Chime config through the config-entry API."""
+
+    entry = data.get("entry")
+    if entry is None:
+        return
+    options = dict(getattr(entry, "options", {}) or {})
+    options[CONF_ACTIVE_CONFIG] = config.to_dict()
+    hass.config_entries.async_update_entry(entry, options=options)
+
+
+def _entry_id_for_data(hass: HomeAssistant, entry_data: dict[str, Any]) -> str | None:
+    """Return the config entry id for an in-memory House Chime entry."""
+
+    for entry_id, data in hass.data.get(DOMAIN, {}).items():
+        if data is entry_data:
+            return entry_id
+    return None

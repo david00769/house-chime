@@ -35,6 +35,7 @@ House Chime registers:
 - `house_chime.discover`
 - `house_chime.resolve`
 - `house_chime.play`
+- `house_chime.set_speakers`
 
 Use `resolve` for dry runs. Use `play` for manual announcements. Manual
 operator test buttons may pass `skip_duplicate_suppression: true` so repeated
@@ -44,6 +45,13 @@ real source automations.
 Use `play` from automations whose triggers come from the real source
 integration, for example a doorbell, camera, presence, or package-delivery
 integration. House Chime does not create or reset helper entities.
+
+Use `set_speakers` from HA Services when an operator or support workflow needs
+to replace the saved speaker list without opening the options form. The service
+accepts a list of `media_player` entity IDs and persists only currently
+available Music Assistant announcement targets. Stale, unavailable, raw input,
+or non-Music-Assistant entities are rejected and the existing speaker selection
+is left unchanged.
 
 House Chime also exposes purpose-specific automation conditions for readiness,
 event enablement, event resolution, and quiet mode, plus an Activity event
@@ -104,6 +112,10 @@ dry-run actions, and intentional play actions. Setup belongs in Home Assistant
 the same thing as the per-event resolved playback target list after quiet rules,
 duplicate suppression, unavailable speakers, or validation. Use the
 last-resolution diagnostic detail when troubleshooting a specific event.
+
+Status sensors also listen for House Chime status-update bus events so
+dashboards repaint after services such as `play`, `resolve`, and
+`set_speakers`.
 
 ## Media
 

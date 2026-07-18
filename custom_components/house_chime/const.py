@@ -3,6 +3,7 @@
 DOMAIN = "house_chime"
 
 CONF_ACTIVE_CONFIG = "active_config"
+CONF_ENTITY_IDS = "entity_ids"
 CONF_EVENT_ID = "event_id"
 CONF_SKIP_DUPLICATE_SUPPRESSION = "skip_duplicate_suppression"
 CONF_MEDIA_EXISTS = "media_exists"
@@ -11,6 +12,7 @@ CONF_EVENT_TYPE = "event_type"
 DEFAULT_NAME = "House Chime"
 PLATFORMS = ["sensor", "binary_sensor", "event"]
 SIGNAL_STATUS_UPDATED = f"{DOMAIN}_status_updated"
+BUS_EVENT_STATUS_UPDATED = f"{DOMAIN}_status_updated"
 BUS_EVENT_ANNOUNCEMENT = f"{DOMAIN}_event"
 
 ANNOUNCEMENT_EVENT_RESOLVED = "resolved"

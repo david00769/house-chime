@@ -62,6 +62,11 @@ button appears to do nothing, check the House Chime diagnostic entities first:
 - `Last failed event`
 - `Last resolution valid`
 
+The House Chime Activity event entity is the most direct signal that a backend
+service call actually ran. Status sensors refresh from a House Chime bus event
+after `resolve`, `play`, and speaker updates; if the Activity event updates but
+status sensors do not, reload the integration and update House Chime.
+
 Then check `Settings -> Repairs` for House Chime issues. URL signing failures,
 unreachable Local Media URLs, missing media, missing zones, and a missing Music
 Assistant service are intended to show there. Incompatible speaker selections
@@ -81,6 +86,9 @@ The Speakers form shows missing saved speakers and suggested current matches
 when it can infer them from friendly names or entity IDs. Treat those
 suggestions as review hints, not automatic migration. House Chime will not
 replace a missing speaker unless you select the current entity before saving.
+For scripted support workflows, `house_chime.set_speakers` can replace the
+saved speaker list through HA Services while still rejecting unavailable or
+incompatible targets.
 
 `Selected target zones` is the saved configured speaker list. If an individual
 event is suppressed or resolves to no playable targets, inspect the
@@ -98,6 +106,10 @@ Use these services before live playback:
 
 - `house_chime.discover`
 - `house_chime.resolve`
+
+Use `house_chime.set_speakers` when the selected speaker list needs to be
+repaired through HA Services. It accepts multiple `media_player` entities and
+persists only currently compatible Music Assistant announcement targets.
 
 The `Review / Dry Run` configuration step performs the same kind of non-audible
 validation for all three built-in events.

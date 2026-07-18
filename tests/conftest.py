@@ -22,6 +22,7 @@ def _install_homeassistant_stubs() -> None:
     config_entries = types.ModuleType("homeassistant.config_entries")
     components = types.ModuleType("homeassistant.components")
     sensor_component = types.ModuleType("homeassistant.components.sensor")
+    binary_sensor_component = types.ModuleType("homeassistant.components.binary_sensor")
     core = types.ModuleType("homeassistant.core")
     const = types.ModuleType("homeassistant.const")
     helpers = types.ModuleType("homeassistant.helpers")
@@ -99,7 +100,17 @@ def _install_homeassistant_stubs() -> None:
         def __call__(self, value: Any) -> Any:
             return value
 
-    class SensorEntity:
+    class EntityBase:
+        def async_on_remove(self, remove_callback):
+            self._remove_callback = remove_callback
+
+        def async_write_ha_state(self) -> None:
+            return None
+
+    class SensorEntity(EntityBase):
+        pass
+
+    class BinarySensorEntity(EntityBase):
         pass
 
     class HomeAssistant:
@@ -117,6 +128,11 @@ def _install_homeassistant_stubs() -> None:
     def async_dispatcher_send(*args: Any, **kwargs: Any):
         return None
 
+    def entity_ids(value: Any) -> list[str]:
+        if isinstance(value, str):
+            return [value]
+        return list(value)
+
     config_entries.ConfigFlow = ConfigFlow
     config_entries.OptionsFlow = OptionsFlow
     config_entries.ConfigEntry = ConfigEntry
@@ -128,15 +144,18 @@ def _install_homeassistant_stubs() -> None:
     selector.MediaSelectorConfig = MediaSelectorConfig
     selector.MediaSelector = MediaSelector
     sensor_component.SensorEntity = SensorEntity
+    binary_sensor_component.BinarySensorEntity = BinarySensorEntity
     core.HomeAssistant = HomeAssistant
     core.SupportsResponse = SupportsResponse
     core.callback = callback
     config_validation.string = str
     config_validation.boolean = bool
+    config_validation.entity_ids = entity_ids
     dispatcher.async_dispatcher_connect = async_dispatcher_connect
     dispatcher.async_dispatcher_send = async_dispatcher_send
     helpers.config_validation = config_validation
     components.sensor = sensor_component
+    components.binary_sensor = binary_sensor_component
     helpers.dispatcher = dispatcher
     helpers.selector = selector
     homeassistant.config_entries = config_entries
@@ -148,6 +167,7 @@ def _install_homeassistant_stubs() -> None:
     sys.modules["homeassistant.config_entries"] = config_entries
     sys.modules["homeassistant.components"] = components
     sys.modules["homeassistant.components.sensor"] = sensor_component
+    sys.modules["homeassistant.components.binary_sensor"] = binary_sensor_component
     sys.modules["homeassistant.core"] = core
     sys.modules["homeassistant.const"] = const
     sys.modules["homeassistant.helpers"] = helpers

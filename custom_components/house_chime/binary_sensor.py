@@ -9,7 +9,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
-from .const import DOMAIN, SIGNAL_STATUS_UPDATED
+from .const import BUS_EVENT_STATUS_UPDATED, DOMAIN, SIGNAL_STATUS_UPDATED
 from .status import BINARY_SENSOR_DESCRIPTIONS, StatusEntityDescription, status_entity_name
 
 
@@ -58,6 +58,18 @@ class HouseChimeStatusBinarySensor(BinarySensorEntity):
                 self._handle_status_update,
             )
         )
+        self.async_on_remove(
+            self.hass.bus.async_listen(
+                BUS_EVENT_STATUS_UPDATED,
+                self._handle_status_event,
+            )
+        )
+
+    @callback
+    def _handle_status_event(self, event) -> None:
+        data = getattr(event, "data", {}) or {}
+        if data.get("entry_id") in (None, self.entry.entry_id):
+            self.async_write_ha_state()
 
     @callback
     def _handle_status_update(self) -> None:

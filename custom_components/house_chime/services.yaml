@@ -51,3 +51,16 @@ play:
       default: false
       selector:
         boolean:
+
+set_speakers:
+  name: Set announcement speakers
+  description: Replace the saved announcement speakers with currently compatible Music Assistant media players.
+  fields:
+    entity_ids:
+      name: Speakers
+      description: Music Assistant media_player entities to use for House Chime announcements.
+      required: true
+      selector:
+        entity:
+          domain: media_player
+          multiple: true
