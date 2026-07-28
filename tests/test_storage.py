@@ -10,7 +10,7 @@ class StorageTest(unittest.TestCase):
         migrated, changed = migrate_config_dict({})
 
         self.assertTrue(changed)
-        self.assertEqual(migrated["version"], 2)
+        self.assertEqual(migrated["version"], 3)
         self.assertEqual(migrated["people"], [])
         self.assertEqual(migrated["zones"], [])
         self.assertEqual(migrated["playback_routes"], [])
@@ -23,6 +23,25 @@ class StorageTest(unittest.TestCase):
         self.assertEqual(migrated["quiet"]["end"], "08:00")
         self.assertEqual(migrated["quiet"]["volume_multiplier"], 0.5)
         self.assertEqual(migrated["normal_volume"], 0.8)
+        self.assertEqual(migrated["zones"], [])
+
+    def test_migration_seeds_selected_zone_volume_multipliers(self) -> None:
+        migrated, changed = migrate_config_dict(
+            {
+                "version": 2,
+                "zones": [
+                    {
+                        "entity_id": "media_player.bedroom",
+                        "name": "Bedroom",
+                        "selected": True,
+                    }
+                ],
+            }
+        )
+
+        self.assertTrue(changed)
+        self.assertEqual(migrated["version"], 3)
+        self.assertEqual(migrated["zones"][0]["volume_multiplier"], 1.0)
 
     def test_migration_drops_removed_bridge_helper_fields(self) -> None:
         migrated, changed = migrate_config_dict(
@@ -50,7 +69,7 @@ class StorageTest(unittest.TestCase):
         )
 
         self.assertTrue(changed)
-        self.assertEqual(migrated["version"], 2)
+        self.assertEqual(migrated["version"], 3)
         self.assertTrue(migrated["people"][0]["playback_enabled_when_home"])
 
 

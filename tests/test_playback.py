@@ -145,6 +145,27 @@ class PlaybackTest(unittest.IsolatedAsyncioTestCase):
             "http://ha.local:8123/media/local/announcements/doorbell.mp3",
         )
 
+    async def test_playback_groups_targets_that_have_different_announcement_levels(self) -> None:
+        hass = FakeHass()
+        resolution = AnnouncementResolution(
+            event_id="front_door_approach",
+            ok=True,
+            media_path="media-source://media_source/local/announcements/front-door.mp3",
+            target_player_entity_ids=["media_player.great_room", "media_player.bedroom"],
+            volume_level=0.8,
+            target_volume_levels={
+                "media_player.great_room": 0.8,
+                "media_player.bedroom": 0.4,
+            },
+        )
+
+        await play_music_assistant_announcement(hass, resolution)
+
+        music_calls = [call for call in hass.services.calls if call[0] == "music_assistant"]
+        self.assertEqual(len(music_calls), 2)
+        by_target = {call[4]["entity_id"][0]: call[2]["announce_volume"] for call in music_calls}
+        self.assertEqual(by_target, {"media_player.great_room": 80, "media_player.bedroom": 40})
+
     async def test_playback_uses_signed_paths_when_home_assistant_supports_them(self) -> None:
         from custom_components.house_chime import playback
 

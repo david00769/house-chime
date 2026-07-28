@@ -557,6 +557,10 @@ def _set_selected_speakers(
                 record.entity_id,
                 ZoneConfig(record.entity_id),
             ).quiet_excluded,
+            volume_multiplier=current_zones_by_entity.get(
+                record.entity_id,
+                ZoneConfig(record.entity_id),
+            ).volume_multiplier,
         )
         for record in selectable_zones
     ]

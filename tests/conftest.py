@@ -90,6 +90,20 @@ def _install_homeassistant_stubs() -> None:
         def __call__(self, value: Any) -> Any:
             return value
 
+    class NumberSelectorMode:
+        SLIDER = "slider"
+
+    class NumberSelectorConfig:
+        def __init__(self, **kwargs: Any) -> None:
+            self.kwargs = kwargs
+
+    class NumberSelector:
+        def __init__(self, config: NumberSelectorConfig) -> None:
+            self.config = config
+
+        def __call__(self, value: Any) -> Any:
+            return value
+
     class MediaSelectorConfig:
         def __init__(self, **kwargs: Any) -> None:
             self.kwargs = kwargs
@@ -148,6 +162,9 @@ def _install_homeassistant_stubs() -> None:
     selector.SelectSelectorMode = SelectSelectorMode
     selector.SelectSelectorConfig = SelectSelectorConfig
     selector.SelectSelector = SelectSelector
+    selector.NumberSelectorMode = NumberSelectorMode
+    selector.NumberSelectorConfig = NumberSelectorConfig
+    selector.NumberSelector = NumberSelector
     selector.MediaSelectorConfig = MediaSelectorConfig
     selector.MediaSelector = MediaSelector
     sensor_component.SensorEntity = SensorEntity

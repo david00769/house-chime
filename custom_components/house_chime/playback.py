@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import timedelta
 import logging
@@ -57,7 +58,6 @@ async def play_music_assistant_announcement(hass: Any, resolution: AnnouncementR
 
     service_data = {
         "url": await _playback_url(hass, resolution.media_path),
-        "announce_volume": int(round(resolution.volume_level * 100)),
     }
     if resolution.trigger_sound_path:
         service_data["use_pre_announce"] = True
@@ -72,12 +72,20 @@ async def play_music_assistant_announcement(hass: Any, resolution: AnnouncementR
 
     warnings: list[str] = []
     try:
-        await hass.services.async_call(
-            "music_assistant",
-            "play_announcement",
-            service_data,
-            blocking=True,
-            target={"entity_id": list(resolution.target_player_entity_ids)},
+        await asyncio.gather(
+            *(
+                hass.services.async_call(
+                    "music_assistant",
+                    "play_announcement",
+                    {
+                        **service_data,
+                        "announce_volume": int(round(volume_level * 100)),
+                    },
+                    blocking=True,
+                    target={"entity_id": entity_ids},
+                )
+                for volume_level, entity_ids in _target_volume_groups(resolution)
+            )
         )
     except Exception:
         _LOGGER.exception("Music Assistant announcement playback failed")
@@ -85,6 +93,26 @@ async def play_music_assistant_announcement(hass: Any, resolution: AnnouncementR
     finally:
         warnings.extend(await _restore_player_snapshots(hass, snapshots))
     return warnings
+
+
+def _target_volume_groups(
+    resolution: AnnouncementResolution,
+) -> list[tuple[float, list[str]]]:
+    """Group targets by their resolved announcement level.
+
+    Music Assistant accepts one ``announce_volume`` per service call. Grouping
+    lets selected targets use deliberately different announcement levels while
+    keeping targets at the same level in a single, simultaneous call.
+    """
+
+    groups: dict[float, list[str]] = {}
+    for entity_id in resolution.target_player_entity_ids:
+        volume_level = resolution.target_volume_levels.get(
+            entity_id,
+            resolution.volume_level,
+        )
+        groups.setdefault(volume_level, []).append(entity_id)
+    return [(volume_level, entity_ids) for volume_level, entity_ids in groups.items()]
 
 
 async def _playback_url(hass: Any, media_path: str) -> str:

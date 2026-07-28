@@ -182,6 +182,14 @@ def resolve_announcement(
     resolution.volume_level = _clamp_volume(
         config.normal_volume * (config.quiet.volume_multiplier if quiet_active else 1.0)
     )
+    zones_by_entity = {zone.entity_id: zone for zone in config.zones}
+    resolution.target_volume_levels = {
+        entity_id: _clamp_volume(
+            resolution.volume_level
+            * max(0.0, zones_by_entity[entity_id].volume_multiplier)
+        )
+        for entity_id in targets
+    }
 
     return resolution
 

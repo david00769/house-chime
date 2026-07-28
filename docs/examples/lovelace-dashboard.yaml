@@ -7,7 +7,7 @@ views:
       - type: markdown
         title: House Chime
         content: |
-          Use this page to check readiness, run silent dry runs, and manually test announcements.
+          Use this page to check readiness, confirm the current announcement level, run silent dry runs, and deliberately test announcements.
 
           Household playback controls are exposed as one House Chime switch per configured Home Assistant person. Add those generated switches from the House Chime device page; this generic example deliberately contains no household entity IDs.
 
@@ -28,6 +28,10 @@ views:
             name: Last intentional suppression
           - entity: binary_sensor.house_chime_quiet_mode_active
             name: Quiet mode active
+          - entity: sensor.house_chime_daytime_announcement_volume
+            name: Daytime volume
+          - entity: sensor.house_chime_last_effective_announcement_volume
+            name: Last effective volume
           - entity: sensor.house_chime_selected_target_zones
             name: Announcement speakers
           - entity: sensor.house_chime_last_played_event

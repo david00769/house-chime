@@ -6,7 +6,7 @@ from typing import Any
 
 from .const import DEFAULT_EVENTS, DEFAULT_VOICES
 
-CURRENT_CONFIG_VERSION = 2
+CURRENT_CONFIG_VERSION = 3
 
 DEFAULT_EVENT_NAMES = {
     "front_door_approach": "Front door approach",
@@ -33,7 +33,7 @@ def migrate_config_dict(data: dict[str, Any] | None) -> tuple[dict[str, Any], bo
     changed = False
 
     if "version" not in config:
-        config["version"] = CURRENT_CONFIG_VERSION
+        config["version"] = 1
         changed = True
 
     if config["version"] > CURRENT_CONFIG_VERSION:
@@ -43,6 +43,14 @@ def migrate_config_dict(data: dict[str, Any] | None) -> tuple[dict[str, Any], bo
 
     if config["version"] < 2:
         config["version"] = 2
+        changed = True
+
+    if config["version"] < 3:
+        for zone in config.get("zones", []):
+            if "volume_multiplier" not in zone:
+                zone["volume_multiplier"] = 1.0
+                changed = True
+        config["version"] = 3
         changed = True
 
     if config["version"] < CURRENT_CONFIG_VERSION:

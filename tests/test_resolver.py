@@ -113,6 +113,13 @@ class ResolverTest(unittest.TestCase):
             ["media_player.great_room", "media_player.bedroom"],
         )
         self.assertEqual(resolution.volume_level, 0.8)
+        self.assertEqual(
+            resolution.target_volume_levels,
+            {
+                "media_player.great_room": 0.8,
+                "media_player.bedroom": 0.8,
+            },
+        )
         self.assertEqual(resolution.present_person_ids, ["david", "claudette"])
         self.assertEqual(resolution.playback_enabled_person_ids, ["david", "claudette"])
 
@@ -191,8 +198,41 @@ class ResolverTest(unittest.TestCase):
         self.assertTrue(resolution.ok)
         self.assertTrue(resolution.quiet_active)
         self.assertEqual(resolution.volume_level, 0.4)
+        self.assertEqual(resolution.target_volume_levels, {"media_player.great_room": 0.4})
         self.assertEqual(resolution.target_player_entity_ids, ["media_player.great_room"])
         self.assertEqual(resolution.quiet_excluded_zone_entity_ids, ["media_player.bedroom"])
+
+    def test_target_multiplier_softens_only_the_configured_speaker(self) -> None:
+        config = sample_config()
+        config.zones[1].volume_multiplier = 0.5
+        runtime = ResolverRuntime(
+            states={
+                "person.david": "home",
+                "media_player.great_room": "idle",
+                "media_player.bedroom": "idle",
+            },
+            available_media={
+                "media-source://media_source/local/announcements/samantha-front-door.mp3",
+                "media-source://media_source/local/announcements/axel-f.mp3",
+            },
+        )
+
+        resolution = resolve_announcement(
+            config,
+            "front_door_approach",
+            runtime,
+            now=datetime.fromisoformat("2026-05-15T14:00:00"),
+        )
+
+        self.assertTrue(resolution.ok)
+        self.assertEqual(resolution.volume_level, 0.8)
+        self.assertEqual(
+            resolution.target_volume_levels,
+            {
+                "media_player.great_room": 0.8,
+                "media_player.bedroom": 0.4,
+            },
+        )
 
     def test_missing_media_asset_fails_loudly(self) -> None:
         config = sample_config()

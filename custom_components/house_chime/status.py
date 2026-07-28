@@ -28,6 +28,8 @@ SENSOR_DESCRIPTIONS = (
     StatusEntityDescription("playback_disabled_people", "Muted listeners home", "mdi:account-off"),
     StatusEntityDescription("last_suppression_reason", "Last suppression reason", "mdi:volume-off"),
     StatusEntityDescription("selected_target_zones", "Selected target zones", "mdi:speaker-multiple"),
+    StatusEntityDescription("configured_daytime_volume", "Daytime announcement volume", "mdi:volume-high"),
+    StatusEntityDescription("last_effective_volume", "Last effective announcement volume", "mdi:volume-medium"),
     StatusEntityDescription("last_media_path", "Last media path", "mdi:file-music"),
     StatusEntityDescription("last_failure_reason", "Last failure reason", "mdi:alert"),
 )
@@ -54,6 +56,8 @@ def status_native_value(key: str, value: Any) -> Any:
         return f"{len(value)} people home"
     if key in {"playback_enabled_people", "playback_disabled_people"} and isinstance(value, list):
         return f"{len(value)} people"
+    if key in {"configured_daytime_volume", "last_effective_volume"} and isinstance(value, (int, float)):
+        return f"{round(value * 100)}%"
     if key == "last_failure_reason" and isinstance(value, str) and len(value) > 255:
         return f"{value.split(':', 1)[0]} (see details)"
     if isinstance(value, list):
@@ -78,6 +82,8 @@ def initial_status(
         "playback_disabled_people": [],
         "last_suppression_reason": None,
         "selected_target_zones": [zone.entity_id for zone in config.zones if zone.selected],
+        "configured_daytime_volume": config.normal_volume,
+        "last_effective_volume": None,
         "last_media_path": None,
         "last_failure_reason": None,
         "quiet_mode_active": False,
@@ -123,6 +129,7 @@ def record_resolution(
         status["active_household_context"] = resolution.active_context_id
         status["last_media_path"] = resolution.media_path
         status["quiet_mode_active"] = resolution.quiet_active
+        status["last_effective_volume"] = resolution.volume_level
     status["present_household_people"] = list(resolution.present_person_ids)
     status["playback_enabled_people"] = list(resolution.playback_enabled_person_ids)
     status["playback_disabled_people"] = list(resolution.playback_disabled_person_ids)

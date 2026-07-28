@@ -21,12 +21,13 @@ After adding the integration, open `Configure`. House Chime walks through:
 - `Personalisation`: select a person and event to configure their optional
   voice and pre-sound override.
 - `Priority`: rank enabled people who are home to choose personalisation.
-- `Speakers`: select available Music Assistant announcement targets.
+- `Playback and volume`: select available Music Assistant announcement targets,
+  set the shared daytime volume, and optionally soften individual speakers.
 - `Sounds`: choose uploaded announcement and chime audio.
 - `Events`: enable Approach, Package, and Doorbell and choose voices.
-- `Quiet rules`: configure quiet hours and quiet volume.
-- `Additional settings`: configure duplicate windows, quiet-zone exclusions,
-  and raw advanced media paths.
+- `Bedtime / quiet hours`: configure quiet hours, quiet volume, and speakers
+  that should be skipped during bedtime.
+- `Advanced settings`: configure duplicate windows and raw advanced media paths.
 - `Review / Dry Run`: check the setup without playing audio.
 
 Keep configuration entry points out of operator dashboards. A House Chime

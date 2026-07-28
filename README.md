@@ -110,12 +110,14 @@ The setup flow is intentionally operator-focused:
   pre-sound override.
 - `Priority`: rank enabled people who are home to choose the personalisation
   used for shared playback.
-- `Speakers`: choose available Music Assistant announcement targets.
+- `Playback and volume`: choose available Music Assistant announcement targets,
+  set the daytime announcement level, and optionally soften individual selected
+  speakers.
 - `Sounds`: select already-uploaded chime and announcement audio.
 - `Events`: enable and map voices for Approach, Package, and Doorbell.
-- `Quiet rules`: set quiet hours and quiet volume.
-- `Additional settings`: duplicate windows, quiet-zone exclusions, and raw
-  advanced media settings.
+- `Bedtime / quiet hours`: set quiet hours, quiet volume, and speakers to skip
+  during bedtime.
+- `Advanced settings`: duplicate windows and raw advanced media settings.
 - `Review / Dry Run`: validate the setup without playing audio.
 
 Diagnostics remain available, but they are not part of the default setup path.

@@ -59,6 +59,7 @@ class ZoneConfig:
     name: str | None = None
     selected: bool = False
     quiet_excluded: bool = False
+    volume_multiplier: float = 1.0
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "ZoneConfig":
@@ -67,6 +68,7 @@ class ZoneConfig:
             name=data.get("name"),
             selected=bool(data.get("selected", False)),
             quiet_excluded=bool(data.get("quiet_excluded", False)),
+            volume_multiplier=float(data.get("volume_multiplier", 1.0)),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -75,6 +77,7 @@ class ZoneConfig:
             "name": self.name,
             "selected": self.selected,
             "quiet_excluded": self.quiet_excluded,
+            "volume_multiplier": self.volume_multiplier,
         }
 
 
@@ -212,7 +215,7 @@ class QuietConfig:
 class AnnouncementConfig:
     """Durable operator-managed configuration."""
 
-    version: int = 2
+    version: int = 3
     people: list[PersonConfig] = field(default_factory=list)
     person_priority: list[str] = field(default_factory=list)
     default_context_id: str | None = None
@@ -288,6 +291,7 @@ class AnnouncementResolution:
     quiet_active: bool = False
     quiet_excluded_zone_entity_ids: list[str] = field(default_factory=list)
     volume_level: float = DEFAULT_NORMAL_VOLUME
+    target_volume_levels: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -308,4 +312,5 @@ class AnnouncementResolution:
             "quiet_active": self.quiet_active,
             "quiet_excluded_zone_entity_ids": list(self.quiet_excluded_zone_entity_ids),
             "volume_level": self.volume_level,
+            "target_volume_levels": dict(self.target_volume_levels),
         }

@@ -110,13 +110,56 @@ def test_options_flow_init_uses_guided_setup_menu() -> None:
         "preferences",
         "personalisation",
         "priority",
-        "zones",
+        "playback",
         "media",
         "events",
         "quiet",
         "additional",
         "review",
     ]
+
+
+def test_options_flow_playback_menu_contains_volume_and_second_level_target_controls() -> None:
+    entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: AnnouncementConfig().to_dict()}, options={})
+    flow = make_options_flow(entry)
+
+    result = asyncio.run(flow.async_step_playback())
+
+    assert result["menu_options"] == ["zones", "volume", "zone_levels"]
+
+
+def test_options_flow_volume_step_persists_daytime_level_and_preview() -> None:
+    config = AnnouncementConfig()
+    entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: config.to_dict()}, options={})
+    flow = make_options_flow(entry)
+    flow.hass = make_fake_hass([])
+
+    form = asyncio.run(flow.async_step_volume())
+    assert form["step_id"] == "volume"
+    assert form["description_placeholders"]["quiet_preview"] == "Daytime 80%; quiet 40%."
+
+    result = asyncio.run(flow.async_step_volume({"normal_volume": 0.6}))
+    assert result["data"][CONF_ACTIVE_CONFIG]["normal_volume"] == 0.6
+
+
+def test_options_flow_zone_level_second_level_persists_multiplier() -> None:
+    config = AnnouncementConfig(
+        zones=[ZoneConfig("media_player.bedroom", "Bedroom", selected=True)]
+    )
+    entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: config.to_dict()}, options={})
+    flow = make_options_flow(entry)
+    flow.hass = make_fake_hass([])
+
+    selection = asyncio.run(flow.async_step_zone_levels({"entity_id": "media_player.bedroom"}))
+    assert selection["step_id"] == "zone_level_detail"
+    assert selection["description_placeholders"] == {
+        "zone_name": "Bedroom",
+        "day_preview": "80%",
+        "quiet_preview": "40%",
+    }
+
+    result = asyncio.run(flow.async_step_zone_level_detail({"volume_multiplier": 0.5}))
+    assert result["data"][CONF_ACTIVE_CONFIG]["zones"][0]["volume_multiplier"] == 0.5
 
 
 def test_config_flow_options_flow_uses_framework_config_entry_property() -> None:
@@ -138,7 +181,7 @@ def test_options_flow_does_not_assign_home_assistant_config_entry_property() -> 
 
     flow = FlowWithReadOnlyConfigEntry()
 
-    assert flow._config().to_dict()["version"] == 2
+    assert flow._config().to_dict()["version"] == 3
 
 
 def test_options_flow_media_step_persists_media_selector_paths() -> None:
@@ -269,14 +312,23 @@ def test_options_flow_person_preferences_and_personalisation_are_selected_by_per
     }
 
 
-def test_options_flow_quiet_step_keeps_quiet_zone_rules_in_additional_settings() -> None:
+def test_options_flow_quiet_step_persists_bedtime_zone_rules() -> None:
     config = AnnouncementConfig()
     config.quiet.excluded_zone_entity_ids = ["media_player.bedroom"]
     config.quiet.zone_start = "21:00"
     config.quiet.zone_end = "07:00"
     entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: config.to_dict()}, options={})
     flow = make_options_flow(entry)
-    flow.hass = make_fake_hass([])
+    flow.hass = make_fake_hass(
+        [
+            FakeState(
+                "media_player.bedroom",
+                "idle",
+                "Bedroom",
+                ma_attrs(),
+            )
+        ]
+    )
 
     result = asyncio.run(
         flow.async_step_quiet(
@@ -285,6 +337,9 @@ def test_options_flow_quiet_step_keeps_quiet_zone_rules_in_additional_settings()
                 "start": "22:00",
                 "end": "08:00",
                 "volume_multiplier": 0.5,
+                "quiet_excluded_zones": ["media_player.bedroom"],
+                "zone_start": "21:00",
+                "zone_end": "07:00",
             }
         )
     )
@@ -504,7 +559,7 @@ def test_options_flow_zones_all_alias_uses_single_speakers_form() -> None:
     ]
 
 
-def test_options_flow_zones_filters_additional_settings_to_compatible_targets() -> None:
+def test_options_flow_zones_filters_to_compatible_targets_and_keeps_bedtime_controls_out_of_advanced() -> None:
     entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: AnnouncementConfig().to_dict()}, options={})
     flow = make_options_flow(entry)
     flow.hass = make_fake_hass(
@@ -533,13 +588,10 @@ def test_options_flow_zones_filters_additional_settings_to_compatible_targets() 
         for field, validator in additional_result["data_schema"].schema.items()
     }
     assert "selected_zones_all" not in additional_fields
-    quiet_excluded_options = additional_fields["quiet_excluded_zones"].config.kwargs["options"]
-    assert [option["value"] for option in quiet_excluded_options] == [
-        "media_player.main_floor_2",
-    ]
+    assert "quiet_excluded_zones" not in additional_fields
 
 
-def test_options_flow_additional_persists_duplicate_windows_and_quiet_rules() -> None:
+def test_options_flow_additional_persists_duplicate_windows_without_changing_quiet_rules() -> None:
     config = AnnouncementConfig(
         people=[PersonConfig(id="david", name="David", entity_id="person.david")],
         zones=[ZoneConfig(entity_id="media_player.great_room", name="Great Room", selected=True)],
@@ -561,9 +613,6 @@ def test_options_flow_additional_persists_duplicate_windows_and_quiet_rules() ->
     result = asyncio.run(
         flow.async_step_additional(
             {
-                "quiet_excluded_zones": ["media_player.great_room"],
-                "zone_start": "21:00",
-                "zone_end": "07:00",
                 "front_door_approach_duplicate_window_seconds": 45,
                 "front_door_package_duplicate_window_seconds": 60,
                 "front_door_doorbell_duplicate_window_seconds": 45,
@@ -572,8 +621,8 @@ def test_options_flow_additional_persists_duplicate_windows_and_quiet_rules() ->
     )
 
     active_config = result["data"][CONF_ACTIVE_CONFIG]
-    assert active_config["quiet"]["excluded_zone_entity_ids"] == ["media_player.great_room"]
-    assert active_config["quiet"]["zone_start"] == "21:00"
+    assert active_config["quiet"]["excluded_zone_entity_ids"] == []
+    assert active_config["quiet"]["zone_start"] is None
     package = next(event for event in active_config["events"] if event["id"] == "front_door_package")
     assert "bridge_helper_entity_id" not in package
     assert package["duplicate_window_seconds"] == 60

@@ -38,6 +38,8 @@ def announcement_event_data(
         "media_path": resolution.media_path,
         "target_player_entity_ids": list(resolution.target_player_entity_ids),
         "quiet_active": resolution.quiet_active,
+        "volume_level": resolution.volume_level,
+        "target_volume_levels": dict(resolution.target_volume_levels),
         "errors": list(resolution.errors),
         "warnings": list(resolution.warnings),
     }

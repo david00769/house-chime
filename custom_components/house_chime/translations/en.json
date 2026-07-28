@@ -43,17 +43,17 @@
     "step": {
       "init": {
         "title": "House Chime setup",
-        "description": "Configure household presence, playback preferences, personalisation, speakers, sounds, events, quiet rules, and a dry-run review.",
+        "description": "Configure household presence, playback levels, sounds, events, bedtime rules, and a dry-run review.",
         "menu_options": {
           "people": "Household people",
           "preferences": "Playback preferences",
           "personalisation": "Personalisation",
           "priority": "Priority",
-          "zones": "Speakers",
+          "playback": "Playback and volume",
           "media": "Sounds",
           "events": "Events",
-          "quiet": "Quiet rules",
-          "additional": "Additional settings",
+          "quiet": "Bedtime / quiet hours",
+          "additional": "Advanced settings",
           "review": "Review / Dry Run"
         }
       },
@@ -115,9 +115,40 @@
       },
       "zones": {
         "title": "Speakers",
-        "description": "Select available Music Assistant media_player targets that can use music_assistant.play_announcement. Compatible players shown: {recommended_count}. Total media players discovered: {total_count}. Unavailable players and raw source/control entities are hidden.\n\nMissing or unavailable saved speakers:\n{missing_selected_zones}\n\nSuggested current matches, for review only:\n{suggested_replacements}\n\nHouse Chime does not automatically replace missing speaker entity IDs. Select the current speaker you want before saving.",
+        "description": "Select available Music Assistant announcement targets. Compatible players shown: {recommended_count}. Total media players discovered: {total_count}. Set their individual announcement levels from Playback and volume.\n\nMissing or unavailable saved speakers:\n{missing_selected_zones}\n\nSuggested current matches, for review only:\n{suggested_replacements}\n\nHouse Chime does not automatically replace missing speaker entity IDs. Select the current speaker you want before saving.",
         "data": {
           "selected_zones": "Announcement speakers"
+        }
+      },
+      "playback": {
+        "title": "Playback and volume",
+        "description": "Choose announcement speakers, set the shared daytime level, and adjust selected speakers when a room needs to be softer."
+      },
+      "volume": {
+        "title": "Daytime announcement volume",
+        "description": "This is the normal level outside bedtime. {quiet_preview}",
+        "data": {
+          "normal_volume": "Daytime volume"
+        },
+        "data_description": {
+          "normal_volume": "The shared announcement level used before a selected speaker's individual adjustment."
+        }
+      },
+      "zone_levels": {
+        "title": "Speaker announcement levels",
+        "description": "Choose one of the {selected_count} selected announcement speakers to adjust. A speaker at 100 percent uses the daytime level unchanged.",
+        "data": {
+          "entity_id": "Speaker"
+        }
+      },
+      "zone_level_detail": {
+        "title": "Speaker announcement level",
+        "description": "{zone_name}: daytime output {day_preview}; bedtime output {quiet_preview}.",
+        "data": {
+          "volume_multiplier": "Speaker level"
+        },
+        "data_description": {
+          "volume_multiplier": "Relative to the shared daytime announcement volume. Use 100 percent for no adjustment."
         }
       },
       "media": {
@@ -175,27 +206,30 @@
         }
       },
       "quiet": {
-        "title": "Quiet rules",
-        "description": "Configure the global quiet window. Quiet-zone exclusions are in Additional settings.",
+        "title": "Bedtime / quiet hours",
+        "description": "Configure when announcements become quieter or skip selected speakers. {effective_preview}",
         "data": {
           "enabled": "Enable quiet mode",
           "start": "Quiet start",
           "end": "Quiet end",
-          "volume_multiplier": "Quiet volume"
+          "volume_multiplier": "Quiet volume",
+          "quiet_excluded_zones": "Speakers to skip during bedtime",
+          "zone_start": "Speaker exclusion start",
+          "zone_end": "Speaker exclusion end"
         },
         "data_description": {
           "start": "24-hour time, for example 22:00.",
           "end": "24-hour time, for example 08:00.",
-          "volume_multiplier": "Volume multiplier during quiet hours. 0.5 means 50 percent of the normal announcement volume."
+          "volume_multiplier": "Volume multiplier during quiet hours. 0.5 means 50 percent of the normal announcement volume.",
+          "quiet_excluded_zones": "These selected announcement speakers do not play while the speaker exclusion window is active.",
+          "zone_start": "Leave blank to use the bedtime start time.",
+          "zone_end": "Leave blank to use the bedtime end time."
         }
       },
       "additional": {
-        "title": "Additional settings",
-        "description": "Configure duplicate suppression, quiet-zone exclusions, and raw media paths. Per-person presence and sound settings are in Playback preferences and Personalisation.",
+        "title": "Advanced settings",
+        "description": "Configure duplicate suppression and raw media paths. Bedtime speaker exclusions are in Bedtime / quiet hours.",
         "data": {
-          "quiet_excluded_zones": "Quiet-zone excluded speakers",
-          "zone_start": "Quiet-zone start",
-          "zone_end": "Quiet-zone end",
           "front_door_approach_duplicate_window_seconds": "Approach duplicate window",
           "front_door_package_duplicate_window_seconds": "Package duplicate window",
           "front_door_doorbell_duplicate_window_seconds": "Doorbell duplicate window",

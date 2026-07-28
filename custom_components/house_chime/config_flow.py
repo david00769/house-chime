@@ -43,7 +43,7 @@ SETUP_MENU_OPTIONS = [
     "preferences",
     "personalisation",
     "priority",
-    "zones",
+    "playback",
     "media",
     "events",
     "quiet",
@@ -94,6 +94,14 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         """Show the configuration menu."""
 
         return self.async_show_menu(step_id="init", menu_options=SETUP_MENU_OPTIONS)
+
+    async def async_step_playback(self, user_input: dict[str, Any] | None = None):
+        """Group speaker selection and announcement-level configuration."""
+
+        return self.async_show_menu(
+            step_id="playback",
+            menu_options=["zones", "volume", "zone_levels"],
+        )
 
     async def async_step_people(self, user_input: dict[str, Any] | None = None):
         """Configure selected people."""
@@ -360,7 +368,14 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                     entity_id=item.entity_id,
                     name=item.name,
                     selected=item.entity_id in selected,
-                    quiet_excluded=zones_by_entity.get(item.entity_id, ZoneConfig(item.entity_id)).quiet_excluded,
+                    quiet_excluded=zones_by_entity.get(
+                        item.entity_id,
+                        ZoneConfig(item.entity_id),
+                    ).quiet_excluded,
+                    volume_multiplier=zones_by_entity.get(
+                        item.entity_id,
+                        ZoneConfig(item.entity_id),
+                    ).volume_multiplier,
                 )
                 for item in selectable_zones
             ]
@@ -394,11 +409,108 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
 
         return await self.async_step_zones(user_input)
 
+    async def async_step_volume(self, user_input: dict[str, Any] | None = None):
+        """Configure the global announcement level used outside quiet hours."""
+
+        config = self._config()
+        if user_input is not None:
+            config.normal_volume = float(user_input["normal_volume"])
+            return self._save(config)
+
+        return self.async_show_form(
+            step_id="volume",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("normal_volume", default=config.normal_volume): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0.1,
+                            max=1.0,
+                            step=0.05,
+                            mode=selector.NumberSelectorMode.SLIDER,
+                        )
+                    )
+                }
+            ),
+            description_placeholders={
+                "quiet_preview": _volume_preview(config.normal_volume, config.quiet.volume_multiplier),
+            },
+        )
+
+    async def async_step_zone_levels(self, user_input: dict[str, Any] | None = None):
+        """Choose a selected announcement target whose level should be adjusted."""
+
+        config = self._config()
+        selected_zones = [zone for zone in config.zones if zone.selected]
+        if user_input is not None:
+            self._zone_level_entity_id = user_input["entity_id"]
+            return await self.async_step_zone_level_detail()
+        return self.async_show_form(
+            step_id="zone_levels",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("entity_id"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=_options(selected_zones, include_entity_id=True),
+                        )
+                    )
+                }
+            ),
+            description_placeholders={"selected_count": str(len(selected_zones))},
+        )
+
+    async def async_step_zone_level_detail(
+        self, user_input: dict[str, Any] | None = None
+    ):
+        """Set one target's relative announcement level."""
+
+        config = self._config()
+        entity_id = getattr(self, "_zone_level_entity_id", None)
+        zone = next(
+            (item for item in config.zones if item.entity_id == entity_id and item.selected),
+            None,
+        )
+        if zone is None:
+            return await self.async_step_zone_levels()
+        if user_input is not None:
+            zone.volume_multiplier = float(user_input["volume_multiplier"])
+            return self._save(config)
+        return self.async_show_form(
+            step_id="zone_level_detail",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        "volume_multiplier",
+                        default=zone.volume_multiplier,
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0.1,
+                            max=1.0,
+                            step=0.05,
+                            mode=selector.NumberSelectorMode.SLIDER,
+                        )
+                    )
+                }
+            ),
+            description_placeholders={
+                "zone_name": zone.name or zone.entity_id,
+                "day_preview": _percentage(config.normal_volume * zone.volume_multiplier),
+                "quiet_preview": _percentage(
+                    config.normal_volume
+                    * config.quiet.volume_multiplier
+                    * zone.volume_multiplier
+                ),
+            },
+        )
+
     async def async_step_quiet(self, user_input: dict[str, Any] | None = None):
         """Configure quiet hours."""
 
         config = self._config()
         quiet = config.quiet
+        discovered_zones = discover_media_players(self.hass.states.async_all())
+        selectable_zones = _selectable_announcement_zones(discovered_zones)
+        selectable_zone_ids = {zone.entity_id for zone in selectable_zones}
+        zone_options = _options(selectable_zones, include_entity_id=True)
 
         if user_input is not None:
             config.quiet = QuietConfig(
@@ -406,10 +518,16 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                 start=user_input["start"],
                 end=user_input["end"],
                 volume_multiplier=float(user_input["volume_multiplier"]),
-                excluded_zone_entity_ids=list(quiet.excluded_zone_entity_ids),
-                zone_start=quiet.zone_start,
-                zone_end=quiet.zone_end,
+                excluded_zone_entity_ids=[
+                    entity_id
+                    for entity_id in user_input.get("quiet_excluded_zones", [])
+                    if entity_id in selectable_zone_ids
+                ],
+                zone_start=user_input.get("zone_start") or None,
+                zone_end=user_input.get("zone_end") or None,
             )
+            for zone in config.zones:
+                zone.quiet_excluded = zone.entity_id in config.quiet.excluded_zone_entity_ids
             return self._save(config)
 
         return self.async_show_form(
@@ -423,8 +541,30 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                         "volume_multiplier",
                         default=quiet.volume_multiplier,
                     ): vol.All(vol.Coerce(float), vol.Range(min=0.0, max=1.0)),
+                    vol.Optional(
+                        "quiet_excluded_zones",
+                        default=[
+                            entity_id
+                            for entity_id in quiet.excluded_zone_entity_ids
+                            if entity_id in selectable_zone_ids
+                        ],
+                    ): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=zone_options,
+                            multiple=True,
+                            mode=selector.SelectSelectorMode.DROPDOWN,
+                        )
+                    ),
+                    vol.Optional("zone_start", default=quiet.zone_start or ""): str,
+                    vol.Optional("zone_end", default=quiet.zone_end or ""): str,
                 }
             ),
+            description_placeholders={
+                "effective_preview": _volume_preview(
+                    config.normal_volume,
+                    quiet.volume_multiplier,
+                ),
+            },
         )
 
     async def async_step_events(self, user_input: dict[str, Any] | None = None):
@@ -545,48 +685,12 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         return await self.async_step_media(user_input)
 
     async def async_step_additional(self, user_input: dict[str, Any] | None = None):
-        """Configure additional fallbacks, duplicate windows, and raw overrides."""
+        """Configure duplicate windows and raw advanced media overrides."""
 
         config = self._config()
-        discovered_zones = discover_media_players(self.hass.states.async_all())
-        selectable_zones = _selectable_announcement_zones(discovered_zones)
-        selectable_zone_ids = {zone.entity_id for zone in selectable_zones}
-        zone_options = _options(selectable_zones, include_entity_id=True)
         events_by_id = {event.id: event for event in config.events}
 
         if user_input is not None:
-            if "selected_zones_all" in user_input:
-                selected = set(user_input.get("selected_zones_all", [])) & selectable_zone_ids
-                current_zones_by_entity = {zone.entity_id: zone for zone in config.zones}
-                config.zones = [
-                    ZoneConfig(
-                        entity_id=item.entity_id,
-                        name=item.name,
-                        selected=item.entity_id in selected,
-                        quiet_excluded=current_zones_by_entity.get(
-                            item.entity_id,
-                            ZoneConfig(item.entity_id),
-                        ).quiet_excluded,
-                    )
-                    for item in selectable_zones
-                ]
-            quiet = config.quiet
-            quiet_excluded_zone_ids = [
-                entity_id
-                for entity_id in user_input.get("quiet_excluded_zones", [])
-                if entity_id in selectable_zone_ids
-            ]
-            config.quiet = QuietConfig(
-                enabled=quiet.enabled,
-                start=quiet.start,
-                end=quiet.end,
-                volume_multiplier=quiet.volume_multiplier,
-                excluded_zone_entity_ids=quiet_excluded_zone_ids,
-                zone_start=user_input.get("zone_start") or None,
-                zone_end=user_input.get("zone_end") or None,
-            )
-            for zone in config.zones:
-                zone.quiet_excluded = zone.entity_id in config.quiet.excluded_zone_entity_ids
             for event_id in DEFAULT_EVENTS:
                 event = events_by_id[event_id]
                 if _trigger_sound_field(event_id) in user_input:
@@ -604,24 +708,6 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
             return self._save(config)
 
         fields = {}
-        fields[
-            vol.Optional(
-                "quiet_excluded_zones",
-                default=[
-                    entity_id
-                    for entity_id in config.quiet.excluded_zone_entity_ids
-                    if entity_id in selectable_zone_ids
-                ],
-            )
-        ] = selector.SelectSelector(
-            selector.SelectSelectorConfig(
-                options=zone_options,
-                multiple=True,
-                mode=selector.SelectSelectorMode.DROPDOWN,
-            )
-        )
-        fields[vol.Optional("zone_start", default=config.quiet.zone_start or "")] = str
-        fields[vol.Optional("zone_end", default=config.quiet.zone_end or "")] = str
         for event_id in DEFAULT_EVENTS:
             event = events_by_id[event_id]
             fields[vol.Optional(_trigger_sound_field(event_id), default=event.common_trigger_sound or "")] = str
@@ -822,6 +908,18 @@ def _duplicate_window_field(event_id: str) -> str:
 
 def _event_label(event_id: str) -> str:
     return EVENT_LABELS.get(event_id, event_id.replace("_", " ").title())
+
+
+def _percentage(value: float) -> str:
+    """Format a clamped Home Assistant volume as an operator-readable percentage."""
+
+    return f"{round(max(0.0, min(1.0, value)) * 100)}%"
+
+
+def _volume_preview(normal_volume: float, quiet_multiplier: float) -> str:
+    """Describe the saved daytime and quiet-time output levels."""
+
+    return f"Daytime {_percentage(normal_volume)}; quiet {_percentage(normal_volume * quiet_multiplier)}."
 
 
 def _media_selector():
