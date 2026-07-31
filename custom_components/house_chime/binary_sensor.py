@@ -6,11 +6,12 @@ from typing import Any
 
 from homeassistant.components.binary_sensor import BinarySensorEntity
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 
 from .const import BUS_EVENT_STATUS_UPDATED, DOMAIN, SIGNAL_STATUS_UPDATED
-from .status import BINARY_SENSOR_DESCRIPTIONS, StatusEntityDescription, status_entity_name
+from .status import BINARY_SENSOR_DESCRIPTIONS, StatusEntityDescription
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities) -> None:
@@ -25,7 +26,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 class HouseChimeStatusBinarySensor(BinarySensorEntity):
     """Boolean status sensor backed by integration runtime state."""
 
-    _attr_has_entity_name = False
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(
         self,
@@ -36,9 +38,20 @@ class HouseChimeStatusBinarySensor(BinarySensorEntity):
         self.hass = hass
         self.entry = entry
         self.description = description
-        self._attr_name = status_entity_name(description)
+        self._attr_name = description.name
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
         self._attr_icon = description.icon
+
+    @property
+    def device_info(self) -> dict[str, Any]:
+        """Group integration diagnostics under one native Home Assistant device."""
+
+        return {
+            "identifiers": {(DOMAIN, self.entry.entry_id)},
+            "name": getattr(self.entry, "title", None) or "House Chime",
+            "manufacturer": "House Chime",
+            "model": "Announcement controller",
+        }
 
     @property
     def is_on(self) -> bool:
@@ -55,6 +68,20 @@ class HouseChimeStatusBinarySensor(BinarySensorEntity):
                 "suppression_reason": self._status.get("approach_suppression_reason"),
                 "suppression_until": self._status.get("approach_suppression_until"),
                 "warning": self._status.get("door_guard_warning"),
+            }
+        if self.description.key == "approach_waiting":
+            return {
+                "sensor_entity_id": self._status.get(
+                    "approach_delay_sensor_entity_id"
+                ),
+                "sensor_state": self._status.get("approach_delay_sensor_state"),
+                "delay_seconds": self._status.get("approach_delay_seconds"),
+                "wait_started_at": self._status.get("approach_wait_started_at"),
+                "wait_until": self._status.get("approach_wait_until"),
+                "last_cancellation_reason": self._status.get(
+                    "last_approach_wait_cancellation_reason"
+                ),
+                "warning": self._status.get("approach_delay_warning"),
             }
         return {}
 

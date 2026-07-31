@@ -6,7 +6,7 @@ from typing import Any
 
 from .const import DEFAULT_EVENTS, DEFAULT_VOICES
 
-CURRENT_CONFIG_VERSION = 4
+CURRENT_CONFIG_VERSION = 5
 
 DEFAULT_EVENT_NAMES = {
     "front_door_approach": "Front door approach",
@@ -62,6 +62,17 @@ def migrate_config_dict(data: dict[str, Any] | None) -> tuple[dict[str, Any], bo
             },
         )
         config["version"] = 4
+        changed = True
+
+    if config["version"] < 5:
+        config.setdefault(
+            "approach_delay",
+            {
+                "sensor_entity_id": None,
+                "delay_seconds": 30,
+            },
+        )
+        config["version"] = 5
         changed = True
 
     if config["version"] < CURRENT_CONFIG_VERSION:
@@ -121,6 +132,20 @@ def migrate_config_dict(data: dict[str, Any] | None) -> tuple[dict[str, Any], bo
         },
     )
     config.setdefault("normal_volume", 0.8)
+    raw_approach_delay = config.get("approach_delay")
+    if not isinstance(raw_approach_delay, dict):
+        raw_approach_delay = {}
+    try:
+        delay_seconds = int(raw_approach_delay.get("delay_seconds", 30))
+    except (TypeError, ValueError):
+        delay_seconds = 30
+    normalised_approach_delay = {
+        "sensor_entity_id": raw_approach_delay.get("sensor_entity_id") or None,
+        "delay_seconds": max(0, min(300, delay_seconds)),
+    }
+    if config.get("approach_delay") != normalised_approach_delay:
+        config["approach_delay"] = normalised_approach_delay
+        changed = True
     raw_door_guard = config.get("door_guard")
     if not isinstance(raw_door_guard, dict):
         raw_door_guard = {}

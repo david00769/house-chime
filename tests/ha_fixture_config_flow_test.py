@@ -9,6 +9,7 @@ from custom_components.house_chime.config_flow import HouseChimeConfigFlow, Hous
 from custom_components.house_chime.const import CONF_ACTIVE_CONFIG, DEFAULT_EVENTS
 from custom_components.house_chime.models import (
     AnnouncementConfig,
+    ApproachDelayConfig,
     DoorGuardConfig,
     PersonConfig,
     ZoneConfig,
@@ -188,7 +189,7 @@ def test_options_flow_does_not_assign_home_assistant_config_entry_property() -> 
 
     flow = FlowWithReadOnlyConfigEntry()
 
-    assert flow._config().to_dict()["version"] == 4
+    assert flow._config().to_dict()["version"] == 5
 
 
 def test_options_flow_media_step_persists_media_selector_paths() -> None:
@@ -628,12 +629,19 @@ def test_event_form_persists_duplicate_window_without_changing_quiet_rules() -> 
     assert package["duplicate_window_seconds"] == 60
 
 
-def test_options_flow_door_guard_uses_binary_sensor_and_persists_duration() -> None:
+def test_options_flow_approach_timing_uses_sensors_and_persists_durations() -> None:
     config = AnnouncementConfig()
     entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: config.to_dict()}, options={})
     flow = make_options_flow(entry)
     flow.hass = make_fake_hass(
-        [FakeState("binary_sensor.front_door", "off", "Front Door")]
+        [
+            FakeState(
+                "binary_sensor.front_door_person",
+                "off",
+                "Front Door Person",
+            ),
+            FakeState("binary_sensor.front_door", "off", "Front Door"),
+        ]
     )
 
     form = asyncio.run(flow.async_step_door_guard())
@@ -641,20 +649,35 @@ def test_options_flow_door_guard_uses_binary_sensor_and_persists_duration() -> N
         getattr(field, "schema", field): validator
         for field, validator in form["data_schema"].schema.items()
     }
-    assert fields["sensor_entity_id"].config.kwargs["domain"] == "binary_sensor"
+    assert (
+        fields["approach_sensor_entity_id"].config.kwargs["domain"]
+        == "binary_sensor"
+    )
+    assert fields["door_sensor_entity_id"].config.kwargs["domain"] == "binary_sensor"
+    assert fields["approach_delay_seconds"].config.kwargs["mode"] == "box"
+    assert fields["after_door_quiet_seconds"].config.kwargs["mode"] == "box"
+    assert "wait 30 seconds" in form["description_placeholders"]["behavior_preview"]
 
     result = asyncio.run(
         flow.async_step_door_guard(
             {
-                "sensor_entity_id": "binary_sensor.front_door",
-                "cooldown_seconds": 180,
+                "approach_sensor_entity_id": (
+                    "binary_sensor.front_door_person"
+                ),
+                "approach_delay_seconds": 45,
+                "door_sensor_entity_id": "binary_sensor.front_door",
+                "after_door_quiet_seconds": 240,
             }
         )
     )
 
+    assert result["data"][CONF_ACTIVE_CONFIG]["approach_delay"] == {
+        "sensor_entity_id": "binary_sensor.front_door_person",
+        "delay_seconds": 45,
+    }
     assert result["data"][CONF_ACTIVE_CONFIG]["door_guard"] == {
         "sensor_entity_id": "binary_sensor.front_door",
-        "cooldown_seconds": 180,
+        "cooldown_seconds": 240,
     }
 
 
@@ -662,6 +685,10 @@ def test_options_flow_review_reports_non_audible_setup_status() -> None:
     config = AnnouncementConfig(
         people=[PersonConfig(id="david", name="David", entity_id="person.david")],
         person_priority=["david"],
+        approach_delay=ApproachDelayConfig(
+            "binary_sensor.front_door_person",
+            30,
+        ),
         door_guard=DoorGuardConfig("binary_sensor.front_door", 180),
     )
     entry = SimpleNamespace(
@@ -673,6 +700,11 @@ def test_options_flow_review_reports_non_audible_setup_status() -> None:
     flow.hass = make_fake_hass(
         [
             FakeState("person.david", "home", "David"),
+            FakeState(
+                "binary_sensor.front_door_person",
+                "on",
+                "Front Door Person",
+            ),
             FakeState("binary_sensor.front_door", "on", "Front Door"),
         ]
     )
@@ -680,6 +712,7 @@ def test_options_flow_review_reports_non_audible_setup_status() -> None:
         "house_chime": {
             "entry-1": {
                 "door_suppression_until": "2099-08-01T00:03:00+00:00",
+                "approach_wait_until": "2099-08-01T00:00:30+00:00",
             }
         }
     }
@@ -692,6 +725,12 @@ def test_options_flow_review_reports_non_audible_setup_status() -> None:
     assert "missing_media_mapping" in result["description_placeholders"]["summary"]
     assert "active (front_door_open)" in result["description_placeholders"]["door_guard"]
     assert "2099-08-01T00:03:00+00:00" in result["description_placeholders"]["door_guard"]
+    assert "continuous detection required for 30 seconds" in result[
+        "description_placeholders"
+    ]["approach_delay"]
+    assert "2099-08-01T00:00:30+00:00" in result["description_placeholders"][
+        "approach_delay"
+    ]
 
 
 def test_default_translated_labels_do_not_expose_raw_setup_keys() -> None:

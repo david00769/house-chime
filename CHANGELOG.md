@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.5.0
+
+- Add configurable delayed automatic Approach announcements, defaulting to 30
+  seconds of continuous person-presence detection.
+- Cancel a pending Approach when the person leaves, the front door opens, or a
+  Doorbell event arrives, without queueing, replaying, or consuming duplicate
+  history.
+- Make the existing 180-second encounter quiet time explicit and editable on
+  the same native Home Assistant options screen; both door-open and Doorbell
+  events start it so the person sensor cannot immediately re-arm.
+- Add `house_chime.ingest_event` as the policy-aware service for source
+  automations and present `house_chime.play` as the explicit Play now bypass.
+- Use targeted entity listeners, config-entry runtime data, native diagnostic
+  device metadata, friendly reason labels, and actionable sensor/setup Repairs.
+- Add Ruff, coverage, HACS, hassfest, and real Home Assistant lifecycle gates.
+- Add Approach waiting, wait deadline, sensor health, and last-cancellation
+  diagnostics.
+- Migrate stored announcement configuration from schema v4 to v5 while
+  preserving the existing door sensor and cooldown.
+
 ## 0.4.0
 
 - Add door-aware suppression for Approach announcements while a configured

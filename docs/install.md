@@ -26,8 +26,9 @@ sections:
   state, default voice, pre-sound, and duplicate window.
 - `Playback`: Music Assistant speakers, shared daytime volume, per-speaker
   overrides, bedtime and quiet-hours behavior, and effective-volume summaries.
-- `Rules & diagnostics`: door-aware Approach suppression and Review / Dry Run,
-  including live door state, active reason, expiry, and readiness by event.
+- `Rules & diagnostics`: Approach timing & suppression and Review / Dry Run,
+  including the continuous-presence wait, live door state, cancellation reason,
+  expiry, and readiness by event.
 
 Keep configuration entry points out of operator dashboards. A House Chime
 dashboard may show readiness, configured speaker status, presence/listener
@@ -161,20 +162,39 @@ intended.
 Manual dashboard play-test buttons may pass
 `skip_duplicate_suppression: true` so a deliberate repeat test is not blocked
 by the event duplicate window. It never bypasses door-aware Approach
-suppression. Leave that option off for real source automations.
+suppression. Source automations should use `house_chime.ingest_event` and leave
+that option off.
 
-## Door-aware Approach suppression
+## Delayed Approach and door-aware suppression
 
-In `Configure -> Rules & diagnostics -> Door-aware approach suppression`,
-select a front-door `binary_sensor` and set `After-door quiet time` from 0 to
-3600 seconds. Leaving the sensor unselected disables this rule.
+In `Configure -> Rules & diagnostics -> Approach timing & suppression`, select
+a person-presence `binary_sensor` that remains `on` while someone is at the
+front door. Set `Wait before announcing` from 0 to 300 seconds; the default is
+30 seconds. House Chime starts the timer on an off-to-on transition and plays
+Approach only if the person remains continuously detected until the deadline.
 
-Approach announcements are dropped while this sensor is open and for the
-configured time after it opens. Doorbell and package announcements continue.
+House Chime cancels the pending Approach if the person sensor turns off,
+becomes unknown or unavailable, the front door opens, or
+`house_chime.ingest_event` receives a Doorbell event. The cancellation is not queued or
+replayed and does not update duplicate-suppression history. Repeated `on`
+updates do not extend the deadline.
+
+Do not keep an older automation that calls `house_chime.play` when the same
+person sensor turns on. That direct service call remains immediate and would
+bypass the automatic wait. Manual Approach calls also remain immediate so
+operators can deliberately test playback.
+
+On the same screen, select a front-door `binary_sensor` and set
+`After-door or Doorbell quiet time` from 0 to 3600 seconds. The default 180 seconds is 3
+minutes. Leaving either sensor unselected disables only that rule.
+
+Approach announcements are dropped while the door sensor is open and for the
+configured time after it opens or a Doorbell event arrives. Doorbell and package
+announcements continue.
 House Chime does not queue, defer, or replay suppressed attempts, and those
 attempts do not update duplicate-suppression history.
 
-Every closed-to-open transition restarts the cooldown. Zero seconds means
+Every closed-to-open transition and Doorbell event restarts the cooldown. Zero seconds means
 open-door suppression only. A restart discards the prior deadline: if the door
 is currently open, House Chime establishes a fresh cooldown; if closed, no
 cooldown starts. A missing, unknown, or unavailable sensor fails open and is
@@ -182,13 +202,15 @@ reported as a configuration warning. An already-running cooldown remains
 active.
 
 Review / Dry Run reports the live door state, active reason, UTC expiry, and
-event readiness. The integration device also exposes Approach suppression
-active and Approach suppression until entities.
+event readiness. The integration device also exposes Approach waiting,
+Approach wait until, Approach suppression active, and Approach suppression
+until entities. The wait is runtime-only: a reload or restart discards it, and
+an already-on person sensor does not create a stale post-startup announcement.
 
 ## Automation Pattern
 
 Use the real source integration as the automation trigger, add House Chime
-conditions when useful, then call `house_chime.play`.
+conditions when useful, then call `house_chime.ingest_event`.
 
 Example shape:
 
@@ -202,7 +224,7 @@ conditions:
     options:
       event_id: front_door_package
 actions:
-  - action: house_chime.play
+  - action: house_chime.ingest_event
     data:
       event_id: front_door_package
 ```
@@ -210,3 +232,9 @@ actions:
 Do not create `input_boolean` handoff helpers for package, approach, or doorbell
 events. House Chime does not own source-event capture; it owns event resolution,
 diagnostics, and playback.
+
+Delayed Approach is the exception to the last sentence: House Chime directly
+listens to the configured person-presence binary sensor so it can enforce one
+continuous configurable wait. Package and Doorbell still originate in their source
+integrations and call `house_chime.ingest_event`; the Doorbell call also cancels
+any pending Approach and starts the configurable encounter quiet time.

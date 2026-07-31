@@ -29,6 +29,7 @@ def _install_homeassistant_stubs() -> None:
     helpers = types.ModuleType("homeassistant.helpers")
     config_validation = types.ModuleType("homeassistant.helpers.config_validation")
     dispatcher = types.ModuleType("homeassistant.helpers.dispatcher")
+    event_helper = types.ModuleType("homeassistant.helpers.event")
     selector = types.ModuleType("homeassistant.helpers.selector")
 
     class ConfigFlow:
@@ -91,6 +92,7 @@ def _install_homeassistant_stubs() -> None:
             return value
 
     class NumberSelectorMode:
+        BOX = "box"
         SLIDER = "slider"
 
     class NumberSelectorConfig:
@@ -136,6 +138,9 @@ def _install_homeassistant_stubs() -> None:
     class SensorEntity(EntityBase):
         pass
 
+    class SensorDeviceClass:
+        TIMESTAMP = "timestamp"
+
     class BinarySensorEntity(EntityBase):
         pass
 
@@ -148,6 +153,9 @@ def _install_homeassistant_stubs() -> None:
     class SupportsResponse:
         OPTIONAL = "optional"
 
+    class EntityCategory:
+        DIAGNOSTIC = "diagnostic"
+
     def callback(func):
         return func
 
@@ -156,6 +164,12 @@ def _install_homeassistant_stubs() -> None:
 
     def async_dispatcher_send(*args: Any, **kwargs: Any):
         return None
+
+    def async_call_later(*args: Any, **kwargs: Any):
+        return lambda: None
+
+    def async_track_state_change_event(*args: Any, **kwargs: Any):
+        return lambda: None
 
     def entity_ids(value: Any) -> list[str]:
         if isinstance(value, str):
@@ -169,6 +183,7 @@ def _install_homeassistant_stubs() -> None:
     config_entries.OptionsFlow = OptionsFlow
     config_entries.ConfigEntry = ConfigEntry
     const.CONF_NAME = "name"
+    const.EntityCategory = EntityCategory
     selector.SelectOptionDict = SelectOptionDict
     selector.SelectSelectorMode = SelectSelectorMode
     selector.SelectSelectorConfig = SelectSelectorConfig
@@ -181,6 +196,7 @@ def _install_homeassistant_stubs() -> None:
     selector.MediaSelectorConfig = MediaSelectorConfig
     selector.MediaSelector = MediaSelector
     sensor_component.SensorEntity = SensorEntity
+    sensor_component.SensorDeviceClass = SensorDeviceClass
     binary_sensor_component.BinarySensorEntity = BinarySensorEntity
     switch_component.SwitchEntity = SwitchEntity
     core.HomeAssistant = HomeAssistant
@@ -192,10 +208,13 @@ def _install_homeassistant_stubs() -> None:
     config_validation.entity_ids = entity_ids
     dispatcher.async_dispatcher_connect = async_dispatcher_connect
     dispatcher.async_dispatcher_send = async_dispatcher_send
+    event_helper.async_call_later = async_call_later
+    event_helper.async_track_state_change_event = async_track_state_change_event
     helpers.config_validation = config_validation
     components.sensor = sensor_component
     components.binary_sensor = binary_sensor_component
     helpers.dispatcher = dispatcher
+    helpers.event = event_helper
     helpers.selector = selector
     homeassistant.config_entries = config_entries
     homeassistant.components = components
@@ -213,6 +232,7 @@ def _install_homeassistant_stubs() -> None:
     sys.modules["homeassistant.helpers"] = helpers
     sys.modules["homeassistant.helpers.config_validation"] = config_validation
     sys.modules["homeassistant.helpers.dispatcher"] = dispatcher
+    sys.modules["homeassistant.helpers.event"] = event_helper
     sys.modules["homeassistant.helpers.selector"] = selector
 
 

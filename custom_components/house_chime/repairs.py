@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Any
 
 from .const import DOMAIN
-from .models import AnnouncementResolution
+from .const import EVENT_FRONT_DOOR_APPROACH, STATE_UNAVAILABLE, STATE_UNKNOWN
+from .models import AnnouncementConfig, AnnouncementResolution
 
 ISSUE_TYPES = (
     "missing_media",
@@ -15,6 +16,72 @@ ISSUE_TYPES = (
     "playback_url_signing_failed",
     "playback_url_unreachable",
 )
+
+SETUP_ISSUE_TYPES = (
+    "delayed_approach_setup_required",
+    "approach_sensor_problem",
+    "door_sensor_problem",
+)
+
+
+async def async_sync_setup_issues(
+    hass: Any,
+    config: AnnouncementConfig,
+    states: dict[str, str],
+) -> None:
+    """Synchronise actionable setup and sensor-health Repair issues."""
+
+    try:
+        from homeassistant.helpers import issue_registry as ir
+        from homeassistant.helpers.issue_registry import IssueSeverity
+    except Exception:
+        return
+
+    approach_enabled = any(
+        event.id == EVENT_FRONT_DOOR_APPROACH and event.enabled
+        for event in config.events
+    )
+    approach_sensor = config.approach_delay.sensor_entity_id
+    problems: dict[str, str | None] = {
+        "delayed_approach_setup_required": (
+            "Choose the person-presence sensor and replace any legacy immediate "
+            "Approach automation with house_chime.ingest_event."
+            if approach_enabled and not approach_sensor
+            else None
+        ),
+        "approach_sensor_problem": _sensor_problem(approach_sensor, states),
+        "door_sensor_problem": _sensor_problem(
+            config.door_guard.sensor_entity_id,
+            states,
+        ),
+    }
+    for issue_type, problem in problems.items():
+        issue_id = f"setup_{issue_type}"
+        if not problem:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
+            continue
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            severity=IssueSeverity.WARNING,
+            translation_key=issue_type,
+            translation_placeholders={"problem": problem},
+        )
+
+
+def _sensor_problem(entity_id: str | None, states: dict[str, str]) -> str | None:
+    """Return an operator-facing sensor problem, or None when usable/unset."""
+
+    if not entity_id:
+        return None
+    state = states.get(entity_id)
+    if state is None:
+        return f"{entity_id} no longer exists"
+    if state in {STATE_UNAVAILABLE, STATE_UNKNOWN}:
+        return f"{entity_id} is {state}"
+    return None
 
 
 async def async_create_resolution_issues(hass: Any, resolution: AnnouncementResolution) -> None:

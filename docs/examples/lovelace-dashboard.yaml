@@ -26,6 +26,10 @@ views:
             name: Muted listeners home
           - entity: sensor.house_chime_last_suppression_reason
             name: Last intentional suppression
+          - entity: binary_sensor.house_chime_approach_waiting
+            name: Approach waiting
+          - entity: sensor.house_chime_approach_wait_until
+            name: Approach wait until
           - entity: binary_sensor.house_chime_approach_suppression_active
             name: Approach suppression active
           - entity: sensor.house_chime_approach_suppression_until
@@ -77,7 +81,7 @@ views:
         square: false
         cards:
           - type: button
-            name: Play Approach
+            name: Play now — Approach
             icon: mdi:door-open
             tap_action:
               action: call-service
@@ -86,7 +90,7 @@ views:
                 event_id: front_door_approach
                 skip_duplicate_suppression: true
           - type: button
-            name: Play Package
+            name: Play now — Package
             icon: mdi:package-variant
             tap_action:
               action: call-service
@@ -95,7 +99,7 @@ views:
                 event_id: front_door_package
                 skip_duplicate_suppression: true
           - type: button
-            name: Play Doorbell
+            name: Play now — Doorbell
             icon: mdi:doorbell-video
             tap_action:
               action: call-service
