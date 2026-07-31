@@ -13,6 +13,7 @@ async def async_get_config_entry_diagnostics(hass: Any, entry: Any) -> dict[str,
     data = hass.data.get(DOMAIN, {}).get(entry.entry_id, {})
     config = data.get("config")
     last_resolution = data.get("last_resolution")
+    approach_delay = getattr(config, "approach_delay", None)
     door_guard = getattr(config, "door_guard", None)
     status = data.get("status", {})
     return {
@@ -22,6 +23,29 @@ async def async_get_config_entry_diagnostics(hass: Any, entry: Any) -> dict[str,
         "zones_count": len(getattr(config, "zones", [])) if config else 0,
         "voices_count": len(getattr(config, "voices", [])) if config else 0,
         "events_count": len(getattr(config, "events", [])) if config else 0,
+        "approach_delay": {
+            "configured": bool(
+                getattr(approach_delay, "sensor_entity_id", None)
+            ),
+            "sensor_entity_id": getattr(
+                approach_delay,
+                "sensor_entity_id",
+                None,
+            ),
+            "delay_seconds": getattr(
+                approach_delay,
+                "delay_seconds",
+                None,
+            ),
+            "sensor_state": status.get("approach_delay_sensor_state"),
+            "waiting": status.get("approach_waiting", False),
+            "wait_started_at": status.get("approach_wait_started_at"),
+            "wait_until": status.get("approach_wait_until"),
+            "last_cancellation_reason": status.get(
+                "last_approach_wait_cancellation_reason"
+            ),
+            "warning": status.get("approach_delay_warning"),
+        },
         "door_guard": {
             "configured": bool(
                 getattr(door_guard, "sensor_entity_id", None)

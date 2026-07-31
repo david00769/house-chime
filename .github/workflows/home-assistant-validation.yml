@@ -1,0 +1,40 @@
+name: Home Assistant validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  hacs:
+    name: HACS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: hacs/action@main
+        with:
+          category: integration
+
+  hassfest:
+    name: hassfest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: home-assistant/actions/hassfest@master
+
+  lifecycle:
+    name: Home Assistant lifecycle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@v8.1.0
+      - name: Run against Home Assistant's real event loop
+        run: >-
+          uv run --no-project --with homeassistant
+          --with pytest-homeassistant-custom-component pytest
+          -p pytest_homeassistant_custom_component -p no:cacheprovider
+          --asyncio-mode=auto ha_tests -q

@@ -5,18 +5,22 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from custom_components.house_chime import (
+    SERVICE_INGEST,
     SERVICE_PLAY,
     _register_services,
+    _start_approach_wait,
 )
 from custom_components.house_chime.const import (
     ANNOUNCEMENT_EVENT_PLAYED,
     BUS_EVENT_ANNOUNCEMENT,
     CONF_EVENT_ID,
     DOMAIN,
+    EVENT_FRONT_DOOR_DOORBELL,
 )
 from custom_components.house_chime.models import (
     AnnouncementConfig,
     AnnouncementResolution,
+    ApproachDelayConfig,
     DoorGuardConfig,
     EventConfig,
 )
@@ -72,6 +76,9 @@ def fake_hass(config: AnnouncementConfig, states: list[FakeState]):
         "last_resolution": None,
         "last_triggered_by_event": {},
         "door_suppression_until": None,
+        "approach_wait_started_at": None,
+        "approach_wait_until": None,
+        "approach_wait_cancel_timer": None,
     }
     hass = SimpleNamespace(
         services=services,
@@ -84,6 +91,81 @@ def fake_hass(config: AnnouncementConfig, states: list[FakeState]):
 
 
 class DoorGuardServiceTest(unittest.IsolatedAsyncioTestCase):
+    async def test_doorbell_cancels_pending_approach_before_resolution(self) -> None:
+        config = AnnouncementConfig(
+            approach_delay=ApproachDelayConfig(
+                "binary_sensor.front_door_person",
+                30,
+            ),
+            events=[
+                EventConfig(id="front_door_approach", name="Approach")
+            ],
+        )
+        hass, data = fake_hass(
+            config,
+            [FakeState("binary_sensor.front_door_person", "on")],
+        )
+        data["approach_wait_started_at"] = "2026-08-01T00:00:00+00:00"
+        data["approach_wait_until"] = "2026-08-01T00:00:30+00:00"
+
+        with patch(
+            "custom_components.house_chime._resolve_from_service_call",
+            new=AsyncMock(
+                return_value=AnnouncementResolution(
+                    event_id=EVENT_FRONT_DOOR_DOORBELL,
+                    ok=True,
+                    suppressed=True,
+                    suppression_reason="duplicate_event",
+                )
+            ),
+        ):
+            await hass.services.handlers[(DOMAIN, SERVICE_PLAY)](
+                SimpleNamespace(data={CONF_EVENT_ID: EVENT_FRONT_DOOR_DOORBELL})
+            )
+
+        self.assertIsNone(data["approach_wait_until"])
+        self.assertEqual(
+            data["status"]["last_approach_wait_cancellation_reason"],
+            "doorbell_during_wait",
+        )
+        self.assertEqual(data["last_triggered_by_event"], {})
+        self.assertIsNotNone(data["door_suppression_until"])
+        self.assertEqual(
+            data["door_suppression_reason"],
+            "recent_doorbell_activity",
+        )
+
+        _start_approach_wait(hass, "entry-1", data)
+        self.assertIsNone(data["approach_wait_until"])
+        self.assertEqual(
+            data["status"]["approach_suppression_reason"],
+            "recent_doorbell_activity",
+        )
+
+    async def test_policy_ingress_queues_approach_instead_of_playing_now(self) -> None:
+        config = AnnouncementConfig(
+            approach_delay=ApproachDelayConfig(
+                "binary_sensor.front_door_person",
+                30,
+            ),
+            events=[
+                EventConfig(id="front_door_approach", name="Approach")
+            ],
+        )
+        hass, data = fake_hass(
+            config,
+            [FakeState("binary_sensor.front_door_person", "on")],
+        )
+
+        result = await hass.services.handlers[(DOMAIN, SERVICE_INGEST)](
+            SimpleNamespace(data={CONF_EVENT_ID: "front_door_approach"})
+        )
+
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["queued"])
+        self.assertIsNotNone(result["wait_until"])
+        self.assertEqual(hass.services.calls, [])
+
     async def test_suppressed_play_never_dispatches_or_updates_duplicate_history(
         self,
     ) -> None:

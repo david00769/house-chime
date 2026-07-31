@@ -8,6 +8,7 @@ from custom_components.house_chime.const import DOMAIN
 from custom_components.house_chime.models import (
     AnnouncementConfig,
     AnnouncementResolution,
+    ApproachDelayConfig,
     DoorGuardConfig,
     PersonConfig,
     ZoneConfig,
@@ -37,17 +38,40 @@ class StatusTest(unittest.TestCase):
             "approach_suppression_active",
             {description.key for description in BINARY_SENSOR_DESCRIPTIONS},
         )
+        self.assertIn(
+            "approach_wait_until",
+            {description.key for description in SENSOR_DESCRIPTIONS},
+        )
+        self.assertIn(
+            "approach_waiting",
+            {description.key for description in BINARY_SENSOR_DESCRIPTIONS},
+        )
 
-    def test_initial_status_exposes_door_guard_diagnostics(self) -> None:
+    def test_initial_status_exposes_approach_timing_diagnostics(self) -> None:
         config = AnnouncementConfig(
+            approach_delay=ApproachDelayConfig(
+                "binary_sensor.front_door_person",
+                30,
+            ),
             door_guard=DoorGuardConfig("binary_sensor.front_door", 180)
         )
 
         status = initial_status(
             config,
-            {"binary_sensor.front_door": "off"},
+            {
+                "binary_sensor.front_door_person": "on",
+                "binary_sensor.front_door": "off",
+            },
         )
 
+        self.assertFalse(status["approach_waiting"])
+        self.assertIsNone(status["approach_wait_until"])
+        self.assertEqual(status["approach_delay_seconds"], 30)
+        self.assertEqual(
+            status["approach_delay_sensor_entity_id"],
+            "binary_sensor.front_door_person",
+        )
+        self.assertEqual(status["approach_delay_sensor_state"], "on")
         self.assertFalse(status["approach_suppression_active"])
         self.assertIsNone(status["approach_suppression_until"])
         self.assertEqual(
@@ -280,6 +304,22 @@ class StatusTest(unittest.TestCase):
         self.assertEqual(
             status_native_value("last_failure_reason", value),
             "incompatible_playback_targets (see details)",
+        )
+
+    def test_operator_status_uses_friendly_reasons_and_timestamps(self) -> None:
+        self.assertEqual(
+            status_native_value(
+                "last_suppression_reason",
+                "recent_doorbell_activity",
+            ),
+            "Recent Doorbell event",
+        )
+        self.assertEqual(
+            status_native_value(
+                "approach_wait_until",
+                "2026-08-01T00:00:30+00:00",
+            ).isoformat(),
+            "2026-08-01T00:00:30+00:00",
         )
 
 

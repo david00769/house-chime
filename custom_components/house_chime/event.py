@@ -28,7 +28,7 @@ except (ModuleNotFoundError, ImportError):
     def callback(func):
         return func
 
-from .const import ANNOUNCEMENT_EVENT_TYPES, BUS_EVENT_ANNOUNCEMENT, DOMAIN
+from .const import ANNOUNCEMENT_EVENT_TYPES, BUS_EVENT_ANNOUNCEMENT
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities) -> None:

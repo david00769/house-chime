@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from .models import AnnouncementConfig, AnnouncementResolution
@@ -32,6 +33,11 @@ SENSOR_DESCRIPTIONS = (
         "Approach suppression until",
         "mdi:timer-sand",
     ),
+    StatusEntityDescription(
+        "approach_wait_until",
+        "Approach wait until",
+        "mdi:account-clock",
+    ),
     StatusEntityDescription("selected_target_zones", "Selected target zones", "mdi:speaker-multiple"),
     StatusEntityDescription("configured_daytime_volume", "Daytime announcement volume", "mdi:volume-high"),
     StatusEntityDescription("last_effective_volume", "Last effective announcement volume", "mdi:volume-medium"),
@@ -47,6 +53,11 @@ BINARY_SENSOR_DESCRIPTIONS = (
         "approach_suppression_active",
         "Approach suppression active",
         "mdi:door-open",
+    ),
+    StatusEntityDescription(
+        "approach_waiting",
+        "Approach waiting",
+        "mdi:account-clock",
     ),
 )
 
@@ -70,9 +81,43 @@ def status_native_value(key: str, value: Any) -> Any:
         return f"{round(value * 100)}%"
     if key == "last_failure_reason" and isinstance(value, str) and len(value) > 255:
         return f"{value.split(':', 1)[0]} (see details)"
+    if key in {"approach_suppression_until", "approach_wait_until"} and isinstance(
+        value,
+        str,
+    ):
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return None
+    if key in {"last_suppression_reason", "last_failure_reason"} and isinstance(
+        value,
+        str,
+    ):
+        return friendly_reason(value)
     if isinstance(value, list):
         return ", ".join(value)
     return value
+
+
+def friendly_reason(reason: str | None) -> str | None:
+    """Translate stable internal reason codes into concise operator copy."""
+
+    if not reason:
+        return None
+    labels = {
+        "front_door_open": "Front door is open",
+        "recent_front_door_activity": "Recent front-door activity",
+        "recent_doorbell_activity": "Recent Doorbell event",
+        "doorbell_during_wait": "Doorbell rang during the wait",
+        "front_door_open_during_wait": "Front door opened during the wait",
+        "person_left_before_delay": "Person left before the wait finished",
+        "approach_sensor_missing": "Person sensor is missing",
+        "approach_sensor_unavailable": "Person sensor is unavailable",
+        "approach_sensor_unknown": "Person sensor state is unknown",
+        "approach_delay_not_configured": "Delayed Approach is not configured",
+        "all_present_people_muted": "Everyone home has muted announcements",
+    }
+    return labels.get(reason, reason.replace("_", " ").capitalize())
 
 
 def initial_status(
@@ -94,6 +139,18 @@ def initial_status(
         "approach_suppression_active": False,
         "approach_suppression_until": None,
         "approach_suppression_reason": None,
+        "approach_waiting": False,
+        "approach_wait_started_at": None,
+        "approach_wait_until": None,
+        "approach_delay_seconds": config.approach_delay.delay_seconds,
+        "approach_delay_sensor_entity_id": config.approach_delay.sensor_entity_id,
+        "approach_delay_sensor_state": (
+            (states or {}).get(config.approach_delay.sensor_entity_id)
+            if config.approach_delay.sensor_entity_id
+            else None
+        ),
+        "approach_delay_warning": None,
+        "last_approach_wait_cancellation_reason": None,
         "door_guard_sensor_entity_id": config.door_guard.sensor_entity_id,
         "door_guard_sensor_state": (
             (states or {}).get(config.door_guard.sensor_entity_id)

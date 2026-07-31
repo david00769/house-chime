@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
@@ -13,7 +14,6 @@ from .const import BUS_EVENT_STATUS_UPDATED, DOMAIN, SIGNAL_STATUS_UPDATED
 from .status import (
     SENSOR_DESCRIPTIONS,
     StatusEntityDescription,
-    status_entity_name,
     status_native_value,
 )
 
@@ -30,7 +30,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
 class HouseChimeStatusSensor(SensorEntity):
     """Status sensor backed by integration runtime state."""
 
-    _attr_has_entity_name = False
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(
         self,
@@ -41,9 +42,22 @@ class HouseChimeStatusSensor(SensorEntity):
         self.hass = hass
         self.entry = entry
         self.description = description
-        self._attr_name = status_entity_name(description)
+        self._attr_name = description.name
         self._attr_unique_id = f"{entry.entry_id}_{description.key}"
         self._attr_icon = description.icon
+        if description.key in {"approach_suppression_until", "approach_wait_until"}:
+            self._attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    @property
+    def device_info(self) -> dict[str, Any]:
+        """Group integration diagnostics under one native Home Assistant device."""
+
+        return {
+            "identifiers": {(DOMAIN, self.entry.entry_id)},
+            "name": getattr(self.entry, "title", None) or "House Chime",
+            "manufacturer": "House Chime",
+            "model": "Announcement controller",
+        }
 
     @property
     def native_value(self) -> Any:
@@ -57,7 +71,10 @@ class HouseChimeStatusSensor(SensorEntity):
         if self.description.key == "selected_target_zones":
             return {"zones": self._status.get("selected_target_zones", [])}
         if self.description.key == "last_failure_reason":
-            return {"last_resolution": self._status.get("last_resolution")}
+            return {
+                "reason_code": self._status.get("last_failure_reason"),
+                "last_resolution": self._status.get("last_resolution"),
+            }
         if self.description.key == "approach_suppression_until":
             return {
                 "active": self._status.get("approach_suppression_active"),
@@ -65,6 +82,20 @@ class HouseChimeStatusSensor(SensorEntity):
                 "sensor_state": self._status.get("door_guard_sensor_state"),
                 "suppression_reason": self._status.get("approach_suppression_reason"),
                 "warning": self._status.get("door_guard_warning"),
+            }
+        if self.description.key == "approach_wait_until":
+            return {
+                "waiting": self._status.get("approach_waiting"),
+                "sensor_entity_id": self._status.get(
+                    "approach_delay_sensor_entity_id"
+                ),
+                "sensor_state": self._status.get("approach_delay_sensor_state"),
+                "delay_seconds": self._status.get("approach_delay_seconds"),
+                "wait_started_at": self._status.get("approach_wait_started_at"),
+                "last_cancellation_reason": self._status.get(
+                    "last_approach_wait_cancellation_reason"
+                ),
+                "warning": self._status.get("approach_delay_warning"),
             }
         return {}
 

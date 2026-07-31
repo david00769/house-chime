@@ -34,19 +34,24 @@ House Chime registers:
 
 - `house_chime.discover`
 - `house_chime.resolve`
+- `house_chime.ingest_event`
 - `house_chime.play`
 - `house_chime.set_speakers`
 - `house_chime.set_playback_routes`
 - `house_chime.set_person_playback`
 
-Use `resolve` for dry runs. Use `play` for manual announcements. Manual
+Use `resolve` for dry runs, `ingest_event` for source automations, and `play`
+as the explicit **Play now** operator action. Manual
 operator test buttons may pass `skip_duplicate_suppression: true` so repeated
 tests are not blocked by the event duplicate window. Do not use that flag in
 real source automations.
 
-Use `play` from automations whose triggers come from the real source
+Use `ingest_event` from automations whose triggers come from the real source
 integration, for example a doorbell, camera, presence, or package-delivery
-integration. House Chime does not create or reset helper entities.
+integration. Configure the person-presence sensor directly in House Chime when
+using delayed automatic Approach announcements; do not also call
+`house_chime.play` from that sensor's automation or the call will be immediate.
+House Chime does not create or reset helper entities.
 
 Use `set_speakers` from HA Services when an operator or support workflow needs
 to replace the saved speaker list without opening the options form. The service
@@ -71,8 +76,8 @@ resolve/play/failure.
 
 ## Automation Model
 
-House Chime is not a source-event bridge. Automations should start from the
-real source integration and call House Chime as the announcement action:
+House Chime is not a source-event bridge. Automations start from the real source
+integration and use House Chime's policy-aware ingress as the announcement action:
 
 ```yaml
 triggers:
@@ -84,7 +89,7 @@ conditions:
     options:
       event_id: front_door_package
 actions:
-  - action: house_chime.play
+  - action: house_chime.ingest_event
     data:
       event_id: front_door_package
 ```
@@ -92,6 +97,11 @@ actions:
 Leave `skip_duplicate_suppression` unset or `false` in real source automations
 so duplicate doorbell/camera/package events are still suppressed. This option
 does not bypass door-aware Approach suppression.
+
+Doorbell source automations call `house_chime.ingest_event` with
+`front_door_doorbell`. Receiving that event cancels any pending delayed
+Approach before Doorbell resolution, including when the Doorbell event is later
+duplicate-suppressed, and starts the configured encounter quiet time.
 
 Use the `house_chime.announcement_activity` trigger only for follow-up
 automations after House Chime resolves, plays, or fails an announcement.
@@ -110,8 +120,9 @@ The setup flow has four Home Assistant-native sections:
   contains its enabled state, default voice, pre-sound, and duplicate window.
 - `Playback`: speakers, shared daytime volume, per-speaker overrides, bedtime
   and quiet-hours behavior, and effective-volume summaries.
-- `Rules & diagnostics`: door-aware Approach suppression and Review / Dry Run
-  readiness, including the live door state, active reason, and expiry.
+- `Rules & diagnostics`: Approach timing & suppression and Review / Dry Run
+  readiness, including the person-presence wait, live door state, cancellation
+  reason, and expiry.
 
 Diagnostics remain available, but they are not part of the default setup path.
 
@@ -149,19 +160,39 @@ Status sensors also listen for House Chime status-update bus events so
 dashboards repaint after services such as `play`, `resolve`, and
 `set_speakers`.
 
-## Door-aware Approach suppression
+## Delayed Approach and door-aware suppression
 
-Select a front-door `binary_sensor` under `Rules & diagnostics`, then set the
-`After-door quiet time` from 0 to 3600 seconds. Leaving the sensor unselected
-disables the feature.
+Open `Configure -> Rules & diagnostics -> Approach timing & suppression`.
+Select a person-presence `binary_sensor` that remains `on` while someone is at
+the front door, then set `Wait before announcing` from 0 to 300 seconds. The
+default is 30 seconds. The Approach announcement runs only if that sensor stays
+continuously `on` for the whole wait.
 
-Approach announcements are dropped while this sensor is open and for the
-configured time after it opens. Doorbell and package announcements continue.
+A pending Approach is cancelled if the person sensor turns off, becomes
+unknown or unavailable, the configured front door opens, or a Doorbell event
+arrives. Cancellation is final: House Chime does not queue or replay the
+announcement, and the cancelled attempt does not consume the duplicate window.
+Repeated `on` updates do not restart an active wait.
+
+The configured sensor is the automatic delayed-Approach trigger. Remove or
+disable any older automation that calls `house_chime.play` immediately when
+the same person sensor turns on. Manual and other external
+`house_chime.play` calls for Approach intentionally remain immediate for
+operator tests and backwards compatibility.
+
+On the same screen, select the front-door `binary_sensor` and set
+`After-door or Doorbell quiet time` from 0 to 3600 seconds. The existing default is 180
+seconds (3 minutes). Leaving either sensor unselected disables only its
+corresponding rule.
+
+Approach announcements are dropped while the door sensor is open and for the
+configured time after it opens or a Doorbell event arrives. Doorbell and package
+announcements continue.
 Suppressed attempts are never queued or replayed when the door closes or the
 timer expires, and they do not consume the duplicate window.
 
-Every closed-to-open transition restarts the cooldown. A zero-second cooldown
-suppresses only while the door remains open. After a Home Assistant restart,
+Every closed-to-open transition and Doorbell event restarts the cooldown. A
+zero-second cooldown suppresses only while the door remains open. After a Home Assistant restart,
 an open door starts a fresh cooldown; a closed door starts with no retained
 cooldown. Missing, unknown, or unavailable sensors fail open and create a
 configuration warning, while a cooldown already in progress remains effective.
@@ -172,9 +203,13 @@ suppression. If an earlier group was already accepted, remaining groups are
 cancelled and diagnostics record a partial-dispatch warning.
 
 The integration device exposes
+`binary_sensor.house_chime_approach_waiting`,
+`sensor.house_chime_approach_wait_until`,
 `binary_sensor.house_chime_approach_suppression_active` and
 `sensor.house_chime_approach_suppression_until` for dashboards and
-troubleshooting.
+troubleshooting. Pending waits are runtime-only and are discarded on
+integration reload or Home Assistant restart; an already-on person sensor does
+not generate a stale announcement after startup.
 
 ## Media
 

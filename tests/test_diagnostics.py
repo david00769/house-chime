@@ -9,6 +9,7 @@ from custom_components.house_chime.diagnostics import (
 )
 from custom_components.house_chime.models import (
     AnnouncementConfig,
+    ApproachDelayConfig,
     DoorGuardConfig,
 )
 
@@ -18,6 +19,10 @@ class DiagnosticsTest(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         config = AnnouncementConfig(
+            approach_delay=ApproachDelayConfig(
+                "binary_sensor.front_door_person",
+                30,
+            ),
             door_guard=DoorGuardConfig("binary_sensor.front_door", 180),
         )
         hass = SimpleNamespace(
@@ -27,6 +32,16 @@ class DiagnosticsTest(unittest.IsolatedAsyncioTestCase):
                         "config": config,
                         "last_resolution": None,
                         "status": {
+                            "approach_delay_sensor_state": "on",
+                            "approach_waiting": True,
+                            "approach_wait_started_at": (
+                                "2026-08-01T00:00:00+00:00"
+                            ),
+                            "approach_wait_until": (
+                                "2026-08-01T00:00:30+00:00"
+                            ),
+                            "last_approach_wait_cancellation_reason": None,
+                            "approach_delay_warning": None,
                             "door_guard_sensor_state": "off",
                             "approach_suppression_active": True,
                             "approach_suppression_reason": (
@@ -47,7 +62,21 @@ class DiagnosticsTest(unittest.IsolatedAsyncioTestCase):
             SimpleNamespace(entry_id="entry-1"),
         )
 
-        self.assertEqual(result["config_version"], 4)
+        self.assertEqual(result["config_version"], 5)
+        self.assertEqual(
+            result["approach_delay"],
+            {
+                "configured": True,
+                "sensor_entity_id": "binary_sensor.front_door_person",
+                "delay_seconds": 30,
+                "sensor_state": "on",
+                "waiting": True,
+                "wait_started_at": "2026-08-01T00:00:00+00:00",
+                "wait_until": "2026-08-01T00:00:30+00:00",
+                "last_cancellation_reason": None,
+                "warning": None,
+            },
+        )
         self.assertEqual(
             result["door_guard"],
             {

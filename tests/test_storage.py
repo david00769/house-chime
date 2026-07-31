@@ -11,7 +11,7 @@ class StorageTest(unittest.TestCase):
         migrated, changed = migrate_config_dict({})
 
         self.assertTrue(changed)
-        self.assertEqual(migrated["version"], 4)
+        self.assertEqual(migrated["version"], 5)
         self.assertEqual(migrated["people"], [])
         self.assertEqual(migrated["zones"], [])
         self.assertEqual(migrated["playback_routes"], [])
@@ -24,6 +24,10 @@ class StorageTest(unittest.TestCase):
         self.assertEqual(migrated["quiet"]["end"], "08:00")
         self.assertEqual(migrated["quiet"]["volume_multiplier"], 0.5)
         self.assertEqual(migrated["normal_volume"], 0.8)
+        self.assertEqual(
+            migrated["approach_delay"],
+            {"sensor_entity_id": None, "delay_seconds": 30},
+        )
         self.assertEqual(
             migrated["door_guard"],
             {"sensor_entity_id": None, "cooldown_seconds": 180},
@@ -45,7 +49,7 @@ class StorageTest(unittest.TestCase):
         )
 
         self.assertTrue(changed)
-        self.assertEqual(migrated["version"], 4)
+        self.assertEqual(migrated["version"], 5)
         self.assertEqual(migrated["zones"][0]["volume_multiplier"], 1.0)
 
     def test_migration_drops_removed_bridge_helper_fields(self) -> None:
@@ -74,7 +78,7 @@ class StorageTest(unittest.TestCase):
         )
 
         self.assertTrue(changed)
-        self.assertEqual(migrated["version"], 4)
+        self.assertEqual(migrated["version"], 5)
         self.assertTrue(migrated["people"][0]["playback_enabled_when_home"])
 
     def test_v3_migration_preserves_existing_configuration_and_adds_door_guard(self) -> None:
@@ -159,12 +163,75 @@ class StorageTest(unittest.TestCase):
         migrated, changed = migrate_config_dict(source)
 
         self.assertTrue(changed)
-        self.assertEqual(migrated["version"], 4)
+        self.assertEqual(migrated["version"], 5)
         for key, expected in expected_existing.items():
             self.assertEqual(migrated[key], expected, key)
         self.assertEqual(
+            migrated["approach_delay"],
+            {"sensor_entity_id": None, "delay_seconds": 30},
+        )
+        self.assertEqual(
             migrated["door_guard"],
             {"sensor_entity_id": None, "cooldown_seconds": 180},
+        )
+
+    def test_v4_migration_preserves_door_guard_and_adds_approach_delay(self) -> None:
+        migrated, changed = migrate_config_dict(
+            {
+                "version": 4,
+                "door_guard": {
+                    "sensor_entity_id": "binary_sensor.front_door",
+                    "cooldown_seconds": 240,
+                },
+            }
+        )
+
+        self.assertTrue(changed)
+        self.assertEqual(migrated["version"], 5)
+        self.assertEqual(
+            migrated["approach_delay"],
+            {"sensor_entity_id": None, "delay_seconds": 30},
+        )
+        self.assertEqual(
+            migrated["door_guard"],
+            {
+                "sensor_entity_id": "binary_sensor.front_door",
+                "cooldown_seconds": 240,
+            },
+        )
+
+    def test_approach_delay_is_normalised_to_the_public_range(self) -> None:
+        too_high, high_changed = migrate_config_dict(
+            {
+                "version": 5,
+                "approach_delay": {
+                    "sensor_entity_id": "",
+                    "delay_seconds": 900,
+                },
+            }
+        )
+        malformed, malformed_changed = migrate_config_dict(
+            {
+                "version": 5,
+                "approach_delay": {
+                    "sensor_entity_id": "binary_sensor.front_door_person",
+                    "delay_seconds": "not-a-number",
+                },
+            }
+        )
+
+        self.assertTrue(high_changed)
+        self.assertEqual(
+            too_high["approach_delay"],
+            {"sensor_entity_id": None, "delay_seconds": 300},
+        )
+        self.assertTrue(malformed_changed)
+        self.assertEqual(
+            malformed["approach_delay"],
+            {
+                "sensor_entity_id": "binary_sensor.front_door_person",
+                "delay_seconds": 30,
+            },
         )
 
     def test_door_guard_duration_is_normalised_to_the_public_range(self) -> None:

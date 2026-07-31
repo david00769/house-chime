@@ -235,10 +235,33 @@ class DoorGuardConfig:
 
 
 @dataclass(slots=True)
+class ApproachDelayConfig:
+    """Continuous-presence rule for delayed Approach announcements."""
+
+    sensor_entity_id: str | None = None
+    delay_seconds: int = 30
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> "ApproachDelayConfig":
+        if not data:
+            return cls()
+        return cls(
+            sensor_entity_id=data.get("sensor_entity_id") or None,
+            delay_seconds=max(0, min(300, int(data.get("delay_seconds", 30)))),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "sensor_entity_id": self.sensor_entity_id,
+            "delay_seconds": self.delay_seconds,
+        }
+
+
+@dataclass(slots=True)
 class AnnouncementConfig:
     """Durable operator-managed configuration."""
 
-    version: int = 4
+    version: int = 5
     people: list[PersonConfig] = field(default_factory=list)
     person_priority: list[str] = field(default_factory=list)
     default_context_id: str | None = None
@@ -247,6 +270,7 @@ class AnnouncementConfig:
     voices: list[VoicePersonality] = field(default_factory=list)
     events: list[EventConfig] = field(default_factory=list)
     quiet: QuietConfig = field(default_factory=QuietConfig)
+    approach_delay: ApproachDelayConfig = field(default_factory=ApproachDelayConfig)
     door_guard: DoorGuardConfig = field(default_factory=DoorGuardConfig)
     normal_volume: float = DEFAULT_NORMAL_VOLUME
 
@@ -267,6 +291,7 @@ class AnnouncementConfig:
             voices=[VoicePersonality.from_dict(item) for item in data.get("voices", [])],
             events=[EventConfig.from_dict(item) for item in data.get("events", [])],
             quiet=QuietConfig.from_dict(data.get("quiet")),
+            approach_delay=ApproachDelayConfig.from_dict(data.get("approach_delay")),
             door_guard=DoorGuardConfig.from_dict(data.get("door_guard")),
             normal_volume=float(data.get("normal_volume", DEFAULT_NORMAL_VOLUME)),
         )
@@ -282,6 +307,7 @@ class AnnouncementConfig:
             "voices": [item.to_dict() for item in self.voices],
             "events": [item.to_dict() for item in self.events],
             "quiet": self.quiet.to_dict(),
+            "approach_delay": self.approach_delay.to_dict(),
             "door_guard": self.door_guard.to_dict(),
             "normal_volume": self.normal_volume,
         }
@@ -295,6 +321,7 @@ class ResolverRuntime:
     available_media: set[str] | None = None
     last_triggered_by_event: dict[str, str] = field(default_factory=dict)
     door_suppression_until: str | None = None
+    door_suppression_reason: str | None = None
 
 
 @dataclass(slots=True)

@@ -37,6 +37,18 @@
     "playback_url_unreachable": {
       "title": "Announcement audio URL is not reachable",
       "description": "House Chime resolved `{event_id}`, but the playback URL could not be fetched before sending it to Music Assistant. Check that the media file is in Home Assistant Local Media and that House Chime is up to date. Error: `{error}`"
+    },
+    "delayed_approach_setup_required": {
+      "title": "Finish delayed Approach setup",
+      "description": "House Chime needs one setup step before automatic Approach announcements are protected from immediate person detections. {problem} Open House Chime options, choose Rules → Approach timing & suppression, then review your source automations."
+    },
+    "approach_sensor_problem": {
+      "title": "Person-presence sensor needs attention",
+      "description": "Delayed Approach cannot verify continuous presence because {problem}. Restore the entity or select a different sensor in House Chime options."
+    },
+    "door_sensor_problem": {
+      "title": "Front-door sensor needs attention",
+      "description": "Door-open suppression cannot be verified because {problem}. Restore the entity or select a different sensor in House Chime options."
     }
   },
   "options": {
@@ -71,9 +83,9 @@
       },
       "rules": {
         "title": "Rules & diagnostics",
-        "description": "Control door-aware suppression and review the effective setup without playing audio.",
+        "description": "Control when Approach announcements wait or stop, then review the effective setup without playing audio.",
         "menu_options": {
-          "door_guard": "Door-aware approach suppression",
+          "door_guard": "Approach timing & suppression",
           "review": "Review / Dry Run"
         }
       },
@@ -272,20 +284,24 @@
         }
       },
       "door_guard": {
-        "title": "Door-aware approach suppression",
-        "description": "Approach announcements are dropped while this sensor is open and for the configured time after it opens. Doorbell and package announcements continue.",
+        "title": "Approach timing & suppression",
+        "description": "Avoid announcing the same front-door encounter twice. House Chime waits while a person remains at the door, then cancels the pending Approach if they leave, the front door opens, or a Doorbell event arrives. Doorbell and Package are never delayed. Source automations should use Receive source event; Play now is a deliberate manual bypass.\n\nCurrent behaviour:\n{behavior_preview}",
         "data": {
-          "sensor_entity_id": "Front door sensor",
-          "cooldown_seconds": "After-door quiet time"
+          "approach_sensor_entity_id": "Person presence sensor",
+          "approach_delay_seconds": "Wait before announcing",
+          "door_sensor_entity_id": "Front door sensor",
+          "after_door_quiet_seconds": "After-door or Doorbell quiet time"
         },
         "data_description": {
-          "sensor_entity_id": "Leave unselected to disable this rule. The binary sensor must report on while the door is open.",
-          "cooldown_seconds": "Seconds to suppress Approach after each closed-to-open transition. Use 0 to suppress only while the door is open."
+          "approach_sensor_entity_id": "Choose a binary sensor that stays on while a person remains at the door. Leave unselected to disable delayed automatic Approach announcements.",
+          "approach_delay_seconds": "The person must remain continuously detected for this long. Use 0 to announce as soon as the sensor turns on.",
+          "door_sensor_entity_id": "Opening this door cancels a pending Approach and starts the after-door quiet time. The binary sensor must report on while the door is open.",
+          "after_door_quiet_seconds": "After the door opens or a Doorbell event arrives, ignore new Approach detections for this long. The default 180 seconds is 3 minutes; use 0 for no extra quiet window."
         }
       },
       "review": {
         "title": "Review / Dry Run",
-        "description": "No audio will play from this step.\n\nDoor rule:\n{door_guard}\n\nEvents:\n{summary}\n\n{music_assistant}"
+        "description": "No audio will play from this step.\n\nDelayed Approach:\n{approach_delay}\n\nDoor rule:\n{door_guard}\n\nEvents:\n{summary}\n\n{music_assistant}"
       }
     }
   }

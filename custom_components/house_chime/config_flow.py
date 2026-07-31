@@ -20,6 +20,7 @@ from .discovery import (
 )
 from .models import (
     AnnouncementConfig,
+    ApproachDelayConfig,
     DoorGuardConfig,
     EventConfig,
     PersonConfig,
@@ -671,7 +672,6 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
     async def async_step_media(self, user_input: dict[str, Any] | None = None):
         """Choose one event whose voice media should be configured."""
 
-        config = self._config()
         if user_input is not None:
             self._media_event_id = user_input["event_id"]
             return await self.async_step_event_media()
@@ -734,41 +734,77 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         return await self.async_step_events()
 
     async def async_step_door_guard(self, user_input: dict[str, Any] | None = None):
-        """Configure door-aware approach-announcement suppression."""
+        """Configure Approach timing and suppression."""
 
         config = self._config()
         if user_input is not None:
+            config.approach_delay = ApproachDelayConfig(
+                sensor_entity_id=user_input.get("approach_sensor_entity_id") or None,
+                delay_seconds=int(user_input["approach_delay_seconds"]),
+            )
             config.door_guard = DoorGuardConfig(
-                sensor_entity_id=user_input.get("sensor_entity_id") or None,
-                cooldown_seconds=int(user_input["cooldown_seconds"]),
+                sensor_entity_id=user_input.get("door_sensor_entity_id") or None,
+                cooldown_seconds=int(user_input["after_door_quiet_seconds"]),
             )
             return self._save(config)
 
-        sensor_field = vol.Optional("sensor_entity_id")
+        approach_sensor_field = vol.Optional("approach_sensor_entity_id")
+        if config.approach_delay.sensor_entity_id:
+            approach_sensor_field = vol.Optional(
+                "approach_sensor_entity_id",
+                default=config.approach_delay.sensor_entity_id,
+            )
+        door_sensor_field = vol.Optional("door_sensor_entity_id")
         if config.door_guard.sensor_entity_id:
-            sensor_field = vol.Optional(
-                "sensor_entity_id",
+            door_sensor_field = vol.Optional(
+                "door_sensor_entity_id",
                 default=config.door_guard.sensor_entity_id,
             )
         fields = {
-            sensor_field: selector.EntitySelector(
+            approach_sensor_field: selector.EntitySelector(
                 selector.EntitySelectorConfig(domain="binary_sensor")
             ),
             vol.Required(
-                "cooldown_seconds",
+                "approach_delay_seconds",
+                default=config.approach_delay.delay_seconds,
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0,
+                    max=300,
+                    step=5,
+                    mode=selector.NumberSelectorMode.BOX,
+                    unit_of_measurement="seconds",
+                )
+            ),
+            door_sensor_field: selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="binary_sensor")
+            ),
+            vol.Required(
+                "after_door_quiet_seconds",
                 default=config.door_guard.cooldown_seconds,
             ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=0,
                     max=3600,
                     step=10,
-                    mode=selector.NumberSelectorMode.SLIDER,
+                    mode=selector.NumberSelectorMode.BOX,
+                    unit_of_measurement="seconds",
                 )
             ),
         }
         return self.async_show_form(
             step_id="door_guard",
             data_schema=vol.Schema(fields),
+            description_placeholders={
+                "behavior_preview": (
+                    f"Person detected → wait "
+                    f"{_human_duration(config.approach_delay.delay_seconds)} → announce. "
+                    "Cancel if the person leaves, the front door opens, or a Doorbell "
+                    f"event arrives. After the door opens or a Doorbell arrives, ignore "
+                    "new Approach detections "
+                    f"for {_human_duration(config.door_guard.cooldown_seconds)}."
+                ),
+            },
         )
 
     async def async_step_review(self, user_input: dict[str, Any] | None = None):
@@ -835,12 +871,29 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                 + (f"; until {door_until}" if door_until else "")
                 + (f"; warning {door_warning}" if door_warning else "")
             )
+        approach_sensor_entity_id = config.approach_delay.sensor_entity_id
+        if not approach_sensor_entity_id:
+            approach_delay_summary = (
+                "Delayed source Approach is disabled until a person-presence sensor "
+                "is selected. Play now remains immediate for manual testing."
+            )
+        else:
+            approach_sensor_state = states.get(approach_sensor_entity_id, "missing")
+            approach_delay_summary = (
+                f"{approach_sensor_entity_id}: {approach_sensor_state}; "
+                f"continuous detection required for "
+                f"{_human_duration(config.approach_delay.delay_seconds)}"
+            )
+            current_wait_until = self._approach_wait_until()
+            if current_wait_until:
+                approach_delay_summary += f"; waiting until {current_wait_until}"
         return self.async_show_form(
             step_id="review",
             data_schema=vol.Schema({}),
             description_placeholders={
                 "summary": "\n".join(summaries),
                 "music_assistant": service_summary,
+                "approach_delay": approach_delay_summary,
                 "door_guard": door_summary,
             },
         )
@@ -863,6 +916,13 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         domain_data = getattr(self.hass, "data", {}).get(DOMAIN, {})
         return (domain_data.get(entry_id) or {}).get("door_suppression_until")
 
+    def _approach_wait_until(self) -> str | None:
+        """Return the current delayed-Approach deadline when options are live."""
+
+        entry_id = getattr(self.config_entry, "entry_id", None)
+        domain_data = getattr(self.hass, "data", {}).get(DOMAIN, {})
+        return (domain_data.get(entry_id) or {}).get("approach_wait_until")
+
 
 def _options(records, *, include_entity_id: bool = False) -> list[selector.SelectOptionDict]:
     name_counts: dict[str, int] = {}
@@ -876,6 +936,17 @@ def _options(records, *, include_entity_id: bool = False) -> list[selector.Selec
             label = f"{record.name} ({record.entity_id})"
         options.append(selector.SelectOptionDict(value=record.entity_id, label=label))
     return options
+
+
+def _human_duration(seconds: int) -> str:
+    """Return concise operator copy for a duration stored in seconds."""
+
+    if seconds == 0:
+        return "no delay"
+    if seconds % 60 == 0:
+        minutes = seconds // 60
+        return f"{minutes} minute" if minutes == 1 else f"{minutes} minutes"
+    return f"{seconds} seconds"
 
 
 def _selectable_announcement_zones(records) -> list:

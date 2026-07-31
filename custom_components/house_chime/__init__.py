@@ -14,7 +14,7 @@ else:
     ServiceCall = Any
 
 try:
-    from homeassistant.core import SupportsResponse
+    from homeassistant.core import SupportsResponse, callback
     import voluptuous as vol
     import homeassistant.helpers.config_validation as cv
     from homeassistant.helpers.dispatcher import async_dispatcher_send
@@ -24,12 +24,24 @@ except ModuleNotFoundError:
     cv = None
     async_dispatcher_send = None
 
+    def callback(func):
+        return func
+
 try:
-    from homeassistant.helpers.event import async_call_later
+    from homeassistant.helpers.event import (
+        async_call_later,
+        async_track_state_change_event,
+    )
 except ModuleNotFoundError:
     async_call_later = None
+    async_track_state_change_event = None
 
 from .activity import fire_announcement_event
+from .approach_delay import (
+    approach_sensor_warning,
+    approach_wait_cancellation_reason,
+    approach_wait_deadline,
+)
 from .const import (
     ANNOUNCEMENT_EVENT_PLAY_FAILED,
     ANNOUNCEMENT_EVENT_PLAYED,
@@ -47,6 +59,8 @@ from .const import (
     CONF_TARGET_PLAYER_ENTITY_ID,
     CONF_ZONE_ENTITY_IDS,
     DOMAIN,
+    EVENT_FRONT_DOOR_APPROACH,
+    EVENT_FRONT_DOOR_DOORBELL,
     PLATFORMS,
     SIGNAL_STATUS_UPDATED,
 )
@@ -57,9 +71,15 @@ from .discovery import (
     is_selectable_announcement_player,
 )
 from .media import async_available_media_for_resolution
-from .models import AnnouncementConfig, ResolverRuntime, ZoneConfig
+from .models import (
+    AnnouncementConfig,
+    AnnouncementResolution,
+    ResolverRuntime,
+    ZoneConfig,
+)
 from .playback import PlaybackMediaError, play_music_assistant_announcement
-from .repairs import async_create_resolution_issues
+from .pending_policy import approach_pending_policy, interaction_suppression_deadline
+from .repairs import async_create_resolution_issues, async_sync_setup_issues
 from .resolver import evaluate_door_guard, resolve_announcement
 from .routes import (
     apply_playback_routes,
@@ -71,6 +91,7 @@ from .storage import migrate_config_dict
 
 SERVICE_DISCOVER = "discover"
 SERVICE_RESOLVE = "resolve"
+SERVICE_INGEST = "ingest_event"
 SERVICE_PLAY = "play"
 SERVICE_SET_SPEAKERS = "set_speakers"
 SERVICE_SET_PLAYBACK_ROUTES = "set_playback_routes"
@@ -170,20 +191,44 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "last_resolution": None,
         "last_triggered_by_event": {},
         "door_suppression_until": door_suppression_until,
+        "door_suppression_reason": (
+            "recent_front_door_activity" if door_suppression_until else None
+        ),
         "door_guard_cancel_timer": None,
+        "approach_wait_started_at": None,
+        "approach_wait_until": None,
+        "approach_wait_cancel_timer": None,
     }
     data = hass.data[DOMAIN][entry.entry_id]
+    entry.runtime_data = data
     _refresh_door_guard_status(hass, data)
+    _refresh_approach_delay_status(hass, data)
     _schedule_door_guard_expiry(hass, entry.entry_id, data)
-    entry.async_on_unload(
-        hass.bus.async_listen(
-            "state_changed",
-            lambda event: _handle_state_change(hass, entry.entry_id, event),
+    tracked_entity_ids = _tracked_entity_ids(config)
+
+    @callback
+    def handle_tracked_state_change(event: Any) -> None:
+        _handle_state_change(hass, entry.entry_id, event)
+
+    if tracked_entity_ids and async_track_state_change_event is not None:
+        entry.async_on_unload(
+            async_track_state_change_event(
+                hass,
+                tracked_entity_ids,
+                handle_tracked_state_change,
+            )
         )
-    )
+    elif tracked_entity_ids:
+        entry.async_on_unload(
+            hass.bus.async_listen(
+                "state_changed",
+                handle_tracked_state_change,
+            )
+        )
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
     _register_services(hass)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await async_sync_setup_issues(hass, config, states)
     return True
 
 
@@ -216,11 +261,15 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     cancel_timer = data.get("door_guard_cancel_timer") if data else None
     if callable(cancel_timer):
         cancel_timer()
+    approach_cancel_timer = data.get("approach_wait_cancel_timer") if data else None
+    if callable(approach_cancel_timer):
+        approach_cancel_timer()
     hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     if not hass.data.get(DOMAIN):
         for service in (
             SERVICE_DISCOVER,
             SERVICE_RESOLVE,
+            SERVICE_INGEST,
             SERVICE_PLAY,
             SERVICE_SET_SPEAKERS,
             SERVICE_SET_PLAYBACK_ROUTES,
@@ -267,6 +316,18 @@ def _register_services(hass: HomeAssistant) -> None:
 
     async def handle_play(call: ServiceCall) -> dict[str, Any]:
         data = _first_entry_data(hass)
+        if call.data[CONF_EVENT_ID] == EVENT_FRONT_DOOR_DOORBELL:
+            _start_encounter_suppression(
+                hass,
+                data,
+                reason="recent_doorbell_activity",
+            )
+            _cancel_approach_wait(
+                hass,
+                data,
+                reason="doorbell_during_wait",
+                record=True,
+            )
         resolution = await _resolve_from_service_call(hass, data, call)
         data["last_resolution"] = resolution
         if not resolution.ok:
@@ -374,6 +435,52 @@ def _register_services(hass: HomeAssistant) -> None:
         )
         return resolution.to_dict()
 
+    async def handle_ingest(call: ServiceCall) -> dict[str, Any]:
+        """Accept source events while preserving delayed-event policy."""
+
+        data = _first_entry_data(hass)
+        event_id = call.data[CONF_EVENT_ID]
+        if event_id != EVENT_FRONT_DOOR_APPROACH:
+            return await handle_play(call)
+
+        config: AnnouncementConfig = data["config"]
+        policy = approach_pending_policy(config)
+        if not policy.trigger_entity_id:
+            return {
+                "event_id": event_id,
+                "ok": False,
+                "queued": False,
+                "suppressed": False,
+                "errors": ["approach_delay_not_configured"],
+            }
+        cancellation_reason = approach_wait_cancellation_reason(
+            config.approach_delay,
+            _state_map(hass),
+        )
+        if cancellation_reason:
+            _record_approach_delay_suppression(
+                hass,
+                data,
+                reason=cancellation_reason,
+                suppression_until=None,
+            )
+            return {
+                "event_id": event_id,
+                "ok": True,
+                "queued": False,
+                "suppressed": True,
+                "suppression_reason": cancellation_reason,
+            }
+        _start_approach_wait(hass, _entry_id_for_data(hass, data), data)
+        return {
+            "event_id": event_id,
+            "ok": True,
+            "queued": bool(data.get("approach_wait_until")),
+            "suppressed": not bool(data.get("approach_wait_until")),
+            "wait_until": data.get("approach_wait_until"),
+            "suppression_reason": data["status"].get("approach_suppression_reason"),
+        }
+
     async def handle_set_speakers(call: ServiceCall) -> dict[str, Any]:
         data = _first_entry_data(hass)
         result = _set_selected_speakers(hass, data, call.data[CONF_ENTITY_IDS])
@@ -412,6 +519,13 @@ def _register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         SERVICE_RESOLVE,
         handle_resolve,
+        schema=EVENT_SCHEMA,
+        **response_kwargs,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_INGEST,
+        handle_ingest,
         schema=EVENT_SCHEMA,
         **response_kwargs,
     )
@@ -469,6 +583,7 @@ async def _resolve_from_service_call(
         available_media=None,
         last_triggered_by_event=last_triggered_by_event,
         door_suppression_until=data.get("door_suppression_until"),
+        door_suppression_reason=data.get("door_suppression_reason"),
     )
     preliminary = resolve_announcement(config, call.data[CONF_EVENT_ID], runtime)
     available_media = await async_available_media_for_resolution(hass, preliminary)
@@ -477,6 +592,7 @@ async def _resolve_from_service_call(
         available_media=available_media,
         last_triggered_by_event=last_triggered_by_event,
         door_suppression_until=data.get("door_suppression_until"),
+        door_suppression_reason=data.get("door_suppression_reason"),
     )
     return resolve_announcement(config, call.data[CONF_EVENT_ID], validated_runtime)
 
@@ -517,20 +633,31 @@ def _presence_entity_ids(config: AnnouncementConfig) -> set[str]:
     return entity_ids
 
 
+def _tracked_entity_ids(config: AnnouncementConfig) -> set[str]:
+    """Return only entities that can change this entry's runtime policy."""
+
+    entity_ids = _presence_entity_ids(config)
+    if config.door_guard.sensor_entity_id:
+        entity_ids.add(config.door_guard.sensor_entity_id)
+    if config.approach_delay.sensor_entity_id:
+        entity_ids.add(config.approach_delay.sensor_entity_id)
+    return entity_ids
+
+
 def _refresh_presence_status(hass: HomeAssistant, data: dict[str, Any]) -> None:
     """Synchronise dashboard presence status with current Home Assistant state."""
 
     refresh_presence_status(data["status"], data["config"], _state_map(hass))
 
 
+@callback
 def _handle_state_change(hass: HomeAssistant, entry_id: str, event: Any) -> None:
-    """Schedule presence and door-guard refreshes on the HA event loop."""
+    """Apply a tracked entity change from Home Assistant's event loop."""
 
     entity_id = event.data.get("entity_id")
     old_state = getattr(event.data.get("old_state"), "state", None)
     new_state = getattr(event.data.get("new_state"), "state", None)
-    hass.loop.call_soon_threadsafe(
-        _refresh_for_state_change,
+    _refresh_for_state_change(
         hass,
         entry_id,
         entity_id,
@@ -563,9 +690,46 @@ def _refresh_for_state_change(
             old_state=old_state,
             new_state=new_state,
         )
+        if new_state == "on" and old_state != "on":
+            _cancel_approach_wait(
+                hass,
+                data,
+                reason="front_door_open_during_wait",
+                suppression_until=data.get("door_suppression_until"),
+                record=True,
+            )
+        changed = True
+    if entity_id == data["config"].approach_delay.sensor_entity_id:
+        if new_state == "on" and old_state != "on":
+            _start_approach_wait(hass, entry_id, data)
+        elif new_state != "on":
+            cancellation_reason = approach_wait_cancellation_reason(
+                data["config"].approach_delay,
+                _state_map(hass),
+            )
+            _cancel_approach_wait(
+                hass,
+                data,
+                reason=cancellation_reason or "person_left_before_delay",
+                record=True,
+            )
+        _refresh_approach_delay_status(hass, data)
         changed = True
     if changed:
         _publish_status_updated(hass, data)
+        _schedule_setup_issue_sync(hass, data)
+
+
+def _schedule_setup_issue_sync(hass: HomeAssistant, data: dict[str, Any]) -> None:
+    """Refresh Repair issues after a tracked sensor changes health."""
+
+    coroutine = async_sync_setup_issues(hass, data["config"], _state_map(hass))
+    if hasattr(hass, "async_create_task"):
+        hass.async_create_task(coroutine)
+    elif hasattr(hass, "loop"):
+        hass.loop.create_task(coroutine)
+    else:
+        coroutine.close()
 
 
 def _refresh_presence_for_entity(
@@ -614,16 +778,41 @@ def _update_door_guard_state(
 ) -> None:
     """Restart the cooldown on each closed-to-open door transition."""
 
-    config: AnnouncementConfig = data["config"]
     now = now or datetime.now(timezone.utc)
     if new_state == "on" and old_state != "on":
-        if config.door_guard.cooldown_seconds > 0:
-            data["door_suppression_until"] = (
-                now + timedelta(seconds=config.door_guard.cooldown_seconds)
-            ).isoformat()
-        else:
-            data["door_suppression_until"] = None
-        _schedule_door_guard_expiry(hass, entry_id, data, now=now)
+        _start_encounter_suppression(
+            hass,
+            data,
+            reason="recent_front_door_activity",
+            now=now,
+        )
+    _refresh_door_guard_status(hass, data, now=now)
+
+
+def _start_encounter_suppression(
+    hass: HomeAssistant,
+    data: dict[str, Any],
+    *,
+    reason: str,
+    now: datetime | None = None,
+) -> None:
+    """Start the shared post-door/post-Doorbell Approach quiet window."""
+
+    now = now or datetime.now(timezone.utc)
+    policy = approach_pending_policy(data["config"])
+    data["door_suppression_until"] = interaction_suppression_deadline(
+        policy,
+        now=now,
+    )
+    data["door_suppression_reason"] = (
+        reason if data["door_suppression_until"] else None
+    )
+    _schedule_door_guard_expiry(
+        hass,
+        _entry_id_for_data(hass, data),
+        data,
+        now=now,
+    )
     _refresh_door_guard_status(hass, data, now=now)
 
 
@@ -646,17 +835,19 @@ def _schedule_door_guard_expiry(
     now = now or datetime.now(timezone.utc)
     delay = max(0.0, (_as_utc(deadline) - _as_utc(now)).total_seconds())
     expected_deadline = data["door_suppression_until"]
+
+    @callback
+    def expire_door_guard(_now: datetime) -> None:
+        _expire_door_guard(hass, entry_id, expected_deadline)
+
     data["door_guard_cancel_timer"] = async_call_later(
         hass,
         delay,
-        lambda _now, expected=expected_deadline: _expire_door_guard(
-            hass,
-            entry_id,
-            expected,
-        ),
+        expire_door_guard,
     )
 
 
+@callback
 def _expire_door_guard(
     hass: HomeAssistant,
     entry_id: str,
@@ -675,6 +866,7 @@ def _expire_door_guard(
         _schedule_door_guard_expiry(hass, entry_id, data, now=now)
         return
     data["door_suppression_until"] = None
+    data["door_suppression_reason"] = None
     data["door_guard_cancel_timer"] = None
     _refresh_door_guard_status(hass, data, now=now)
     _publish_status_updated(hass, data)
@@ -697,6 +889,7 @@ def _active_door_suppression(
         ResolverRuntime(
             states=_state_map(hass),
             door_suppression_until=data.get("door_suppression_until"),
+            door_suppression_reason=data.get("door_suppression_reason"),
         ),
         now=now,
     )
@@ -718,6 +911,7 @@ def _refresh_door_guard_status(
         ResolverRuntime(
             states=states,
             door_suppression_until=data.get("door_suppression_until"),
+            door_suppression_reason=data.get("door_suppression_reason"),
         ),
         now=now,
     )
@@ -731,6 +925,226 @@ def _refresh_door_guard_status(
         states.get(sensor_entity_id) if sensor_entity_id else None
     )
     status["door_guard_warning"] = warning
+
+
+def _start_approach_wait(
+    hass: HomeAssistant,
+    entry_id: str,
+    data: dict[str, Any],
+    *,
+    now: datetime | None = None,
+) -> None:
+    """Start one continuous-presence wait after a clean sensor-on transition."""
+
+    config: AnnouncementConfig = data["config"]
+    delay_config = config.approach_delay
+    if not delay_config.sensor_entity_id or data.get("approach_wait_until"):
+        return
+    approach_event = next(
+        (event for event in config.events if event.id == EVENT_FRONT_DOOR_APPROACH),
+        None,
+    )
+    if approach_event is None or not approach_event.enabled:
+        return
+    states = _state_map(hass)
+    cancellation_reason = approach_wait_cancellation_reason(delay_config, states)
+    if cancellation_reason:
+        return
+    door_reason, door_until = _active_door_suppression(
+        hass,
+        data,
+        event_id=EVENT_FRONT_DOOR_APPROACH,
+        now=now,
+    )
+    if door_reason:
+        _record_approach_delay_suppression(
+            hass,
+            data,
+            reason=door_reason,
+            suppression_until=door_until,
+        )
+        return
+
+    now = now or datetime.now(timezone.utc)
+    wait_until = approach_wait_deadline(delay_config, now=now)
+    data["approach_wait_started_at"] = now.isoformat()
+    data["approach_wait_until"] = wait_until
+    data["status"]["last_approach_wait_cancellation_reason"] = None
+    cancel_timer = data.get("approach_wait_cancel_timer")
+    if callable(cancel_timer):
+        cancel_timer()
+    data["approach_wait_cancel_timer"] = None
+
+    if async_call_later is not None:
+        deadline = _deadline_datetime(wait_until)
+        delay = (
+            max(0.0, (_as_utc(deadline) - _as_utc(now)).total_seconds())
+            if deadline is not None
+            else 0.0
+        )
+
+        @callback
+        def complete_approach_wait(_now: datetime) -> None:
+            _schedule_approach_completion(hass, entry_id, wait_until)
+
+        data["approach_wait_cancel_timer"] = async_call_later(
+            hass,
+            delay,
+            complete_approach_wait,
+        )
+    _refresh_approach_delay_status(hass, data)
+    _publish_status_updated(hass, data)
+
+
+@callback
+def _schedule_approach_completion(
+    hass: HomeAssistant,
+    entry_id: str,
+    expected_deadline: str,
+) -> None:
+    """Schedule the async completion check from a Home Assistant timer."""
+
+    data = hass.data.get(DOMAIN, {}).get(entry_id)
+    if data is None or data.get("approach_wait_until") != expected_deadline:
+        return
+    coroutine = _complete_approach_wait(hass, entry_id, expected_deadline)
+    if hasattr(hass, "async_create_task"):
+        hass.async_create_task(coroutine)
+    else:
+        hass.loop.create_task(coroutine)
+
+
+async def _complete_approach_wait(
+    hass: HomeAssistant,
+    entry_id: str,
+    expected_deadline: str,
+) -> None:
+    """Recheck every cancellation condition before automatic playback."""
+
+    data = hass.data.get(DOMAIN, {}).get(entry_id)
+    if data is None or data.get("approach_wait_until") != expected_deadline:
+        return
+    cancellation_reason = approach_wait_cancellation_reason(
+        data["config"].approach_delay,
+        _state_map(hass),
+    )
+    if cancellation_reason:
+        _cancel_approach_wait(
+            hass,
+            data,
+            reason=cancellation_reason,
+            record=True,
+        )
+        return
+    door_reason, door_until = _active_door_suppression(
+        hass,
+        data,
+        event_id=EVENT_FRONT_DOOR_APPROACH,
+    )
+    if door_reason:
+        _cancel_approach_wait(
+            hass,
+            data,
+            reason=door_reason,
+            suppression_until=door_until,
+            record=True,
+        )
+        return
+
+    _clear_approach_wait(data)
+    data["status"]["last_approach_wait_cancellation_reason"] = None
+    _refresh_approach_delay_status(hass, data)
+    _publish_status_updated(hass, data)
+    await hass.services.async_call(
+        DOMAIN,
+        SERVICE_PLAY,
+        {CONF_EVENT_ID: EVENT_FRONT_DOOR_APPROACH},
+        blocking=True,
+    )
+
+
+def _cancel_approach_wait(
+    hass: HomeAssistant,
+    data: dict[str, Any],
+    *,
+    reason: str,
+    suppression_until: str | None = None,
+    record: bool,
+) -> bool:
+    """Cancel one active wait without queueing or consuming duplicate history."""
+
+    if not data.get("approach_wait_until"):
+        return False
+    _clear_approach_wait(data)
+    data["status"]["last_approach_wait_cancellation_reason"] = reason
+    _refresh_approach_delay_status(hass, data)
+    if record:
+        _record_approach_delay_suppression(
+            hass,
+            data,
+            reason=reason,
+            suppression_until=suppression_until,
+        )
+    else:
+        _publish_status_updated(hass, data)
+    return True
+
+
+def _clear_approach_wait(data: dict[str, Any]) -> None:
+    """Clear runtime-only delayed-Approach state."""
+
+    cancel_timer = data.get("approach_wait_cancel_timer")
+    if callable(cancel_timer):
+        cancel_timer()
+    data["approach_wait_cancel_timer"] = None
+    data["approach_wait_started_at"] = None
+    data["approach_wait_until"] = None
+
+
+def _record_approach_delay_suppression(
+    hass: HomeAssistant,
+    data: dict[str, Any],
+    *,
+    reason: str,
+    suppression_until: str | None,
+) -> None:
+    """Publish an intentional source-side suppression for diagnostics."""
+
+    resolution = AnnouncementResolution(
+        event_id=EVENT_FRONT_DOOR_APPROACH,
+        ok=True,
+        suppressed=True,
+        suppression_reason=reason,
+        suppression_until=suppression_until,
+    )
+    data["last_resolution"] = resolution
+    _record_and_publish_status(hass, data, resolution, outcome="suppressed")
+    fire_announcement_event(
+        hass,
+        ANNOUNCEMENT_EVENT_SUPPRESSED,
+        resolution,
+        source="approach_delay",
+    )
+
+
+def _refresh_approach_delay_status(
+    hass: HomeAssistant,
+    data: dict[str, Any],
+) -> None:
+    """Synchronise delayed-Approach diagnostics with current runtime state."""
+
+    config = data["config"].approach_delay
+    states = _state_map(hass)
+    status = data["status"]
+    status["approach_waiting"] = bool(data.get("approach_wait_until"))
+    status["approach_wait_started_at"] = data.get("approach_wait_started_at")
+    status["approach_wait_until"] = data.get("approach_wait_until")
+    status["approach_delay_seconds"] = config.delay_seconds
+    status["approach_delay_sensor_entity_id"] = config.sensor_entity_id
+    status["approach_delay_sensor_state"] = (
+        states.get(config.sensor_entity_id) if config.sensor_entity_id else None
+    )
+    status["approach_delay_warning"] = approach_sensor_warning(config, states)
 
 
 def _deadline_datetime(value: str | None) -> datetime | None:

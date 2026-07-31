@@ -27,13 +27,44 @@ resolve:
       selector:
         boolean:
 
-play:
-  name: Play announcement
-  description: Resolve and play an announcement through Music Assistant/Juke.
+ingest_event:
+  name: Receive source event
+  description: >
+    Policy-aware entry point for source automations. Approach honours the
+    configured continuous-presence delay; Doorbell cancels and quiets Approach;
+    Package and Doorbell play without an added delay.
   fields:
     event_id:
       name: Event
-      description: Announcement event to play.
+      description: Announcement event received from a source automation.
+      required: true
+      selector:
+        select:
+          options:
+            - label: Approach
+              value: front_door_approach
+            - label: Package
+              value: front_door_package
+            - label: Doorbell
+              value: front_door_doorbell
+    skip_duplicate_suppression:
+      name: Skip duplicate suppression
+      description: Leave off for normal source automations.
+      required: false
+      default: false
+      selector:
+        boolean:
+
+play:
+  name: Play now
+  description: >
+    Immediately resolve and play an announcement through Music Assistant/Juke.
+    This operator bypass is for manual tests and dashboards; source automations
+    should use Receive source event.
+  fields:
+    event_id:
+      name: Event
+      description: Announcement event to play immediately.
       required: true
       selector:
         select:
