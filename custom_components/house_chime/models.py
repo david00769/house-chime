@@ -212,10 +212,33 @@ class QuietConfig:
 
 
 @dataclass(slots=True)
+class DoorGuardConfig:
+    """Door activity rule for approach-announcement suppression."""
+
+    sensor_entity_id: str | None = None
+    cooldown_seconds: int = 180
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any] | None) -> "DoorGuardConfig":
+        if not data:
+            return cls()
+        return cls(
+            sensor_entity_id=data.get("sensor_entity_id") or None,
+            cooldown_seconds=max(0, min(3600, int(data.get("cooldown_seconds", 180)))),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "sensor_entity_id": self.sensor_entity_id,
+            "cooldown_seconds": self.cooldown_seconds,
+        }
+
+
+@dataclass(slots=True)
 class AnnouncementConfig:
     """Durable operator-managed configuration."""
 
-    version: int = 3
+    version: int = 4
     people: list[PersonConfig] = field(default_factory=list)
     person_priority: list[str] = field(default_factory=list)
     default_context_id: str | None = None
@@ -224,6 +247,7 @@ class AnnouncementConfig:
     voices: list[VoicePersonality] = field(default_factory=list)
     events: list[EventConfig] = field(default_factory=list)
     quiet: QuietConfig = field(default_factory=QuietConfig)
+    door_guard: DoorGuardConfig = field(default_factory=DoorGuardConfig)
     normal_volume: float = DEFAULT_NORMAL_VOLUME
 
     @classmethod
@@ -243,6 +267,7 @@ class AnnouncementConfig:
             voices=[VoicePersonality.from_dict(item) for item in data.get("voices", [])],
             events=[EventConfig.from_dict(item) for item in data.get("events", [])],
             quiet=QuietConfig.from_dict(data.get("quiet")),
+            door_guard=DoorGuardConfig.from_dict(data.get("door_guard")),
             normal_volume=float(data.get("normal_volume", DEFAULT_NORMAL_VOLUME)),
         )
 
@@ -257,6 +282,7 @@ class AnnouncementConfig:
             "voices": [item.to_dict() for item in self.voices],
             "events": [item.to_dict() for item in self.events],
             "quiet": self.quiet.to_dict(),
+            "door_guard": self.door_guard.to_dict(),
             "normal_volume": self.normal_volume,
         }
 
@@ -268,6 +294,7 @@ class ResolverRuntime:
     states: dict[str, str] = field(default_factory=dict)
     available_media: set[str] | None = None
     last_triggered_by_event: dict[str, str] = field(default_factory=dict)
+    door_suppression_until: str | None = None
 
 
 @dataclass(slots=True)
@@ -284,6 +311,7 @@ class AnnouncementResolution:
     playback_enabled_person_ids: list[str] = field(default_factory=list)
     playback_disabled_person_ids: list[str] = field(default_factory=list)
     suppression_reason: str | None = None
+    suppression_until: str | None = None
     voice_id: str | None = None
     media_path: str | None = None
     trigger_sound_path: str | None = None
@@ -305,6 +333,7 @@ class AnnouncementResolution:
             "playback_enabled_person_ids": list(self.playback_enabled_person_ids),
             "playback_disabled_person_ids": list(self.playback_disabled_person_ids),
             "suppression_reason": self.suppression_reason,
+            "suppression_until": self.suppression_until,
             "voice_id": self.voice_id,
             "media_path": self.media_path,
             "trigger_sound_path": self.trigger_sound_path,

@@ -34,6 +34,7 @@ def announcement_event_data(
         "playback_enabled_person_ids": list(resolution.playback_enabled_person_ids),
         "playback_disabled_person_ids": list(resolution.playback_disabled_person_ids),
         "suppression_reason": resolution.suppression_reason,
+        "suppression_until": resolution.suppression_until,
         "voice_id": resolution.voice_id,
         "media_path": resolution.media_path,
         "target_player_entity_ids": list(resolution.target_player_entity_ids),

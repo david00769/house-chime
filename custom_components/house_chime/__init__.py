@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -23,6 +23,11 @@ except ModuleNotFoundError:
     vol = None
     cv = None
     async_dispatcher_send = None
+
+try:
+    from homeassistant.helpers.event import async_call_later
+except ModuleNotFoundError:
+    async_call_later = None
 
 from .activity import fire_announcement_event
 from .const import (
@@ -55,7 +60,7 @@ from .media import async_available_media_for_resolution
 from .models import AnnouncementConfig, ResolverRuntime, ZoneConfig
 from .playback import PlaybackMediaError, play_music_assistant_announcement
 from .repairs import async_create_resolution_issues
-from .resolver import resolve_announcement
+from .resolver import evaluate_door_guard, resolve_announcement
 from .routes import (
     apply_playback_routes,
     normalise_playback_routes,
@@ -156,17 +161,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             entry_data[CONF_ACTIVE_CONFIG] = config_dict
             hass.config_entries.async_update_entry(entry, data=entry_data)
     config = AnnouncementConfig.from_dict(config_dict)
+    states = _state_map(hass)
+    door_suppression_until = _initial_door_suppression_until(config, states)
     hass.data[DOMAIN][entry.entry_id] = {
         "entry": entry,
         "config": config,
-        "status": initial_status(config, _state_map(hass)),
+        "status": initial_status(config, states),
         "last_resolution": None,
         "last_triggered_by_event": {},
+        "door_suppression_until": door_suppression_until,
+        "door_guard_cancel_timer": None,
     }
+    data = hass.data[DOMAIN][entry.entry_id]
+    _refresh_door_guard_status(hass, data)
+    _schedule_door_guard_expiry(hass, entry.entry_id, data)
     entry.async_on_unload(
         hass.bus.async_listen(
             "state_changed",
-            lambda event: _handle_presence_state_change(hass, entry.entry_id, event),
+            lambda event: _handle_state_change(hass, entry.entry_id, event),
         )
     )
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
@@ -200,6 +212,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if not unload_ok:
         return False
+    data = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    cancel_timer = data.get("door_guard_cancel_timer") if data else None
+    if callable(cancel_timer):
+        cancel_timer()
     hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     if not hass.data.get(DOMAIN):
         for service in (
@@ -298,7 +314,15 @@ def _register_services(hass: HomeAssistant) -> None:
             )
             return resolution.to_dict()
         try:
-            warnings = await play_music_assistant_announcement(hass, resolution)
+            playback_result = await play_music_assistant_announcement(
+                hass,
+                resolution,
+                should_cancel=lambda: _active_door_suppression(
+                    hass,
+                    data,
+                    event_id=resolution.event_id,
+                ),
+            )
         except PlaybackMediaError as err:
             resolution.ok = False
             resolution.errors.append(str(err))
@@ -323,7 +347,23 @@ def _register_services(hass: HomeAssistant) -> None:
                 source="play",
             )
             return resolution.to_dict()
-        resolution.warnings.extend(warnings)
+        resolution.warnings.extend(playback_result.warnings)
+        if playback_result.cancelled_reason:
+            resolution.suppression_reason = playback_result.cancelled_reason
+            resolution.suppression_until = playback_result.suppression_until
+            if playback_result.dispatched_group_count == 0:
+                resolution.suppressed = True
+                _record_and_publish_status(hass, data, resolution, outcome="suppressed")
+                fire_announcement_event(
+                    hass,
+                    ANNOUNCEMENT_EVENT_SUPPRESSED,
+                    resolution,
+                    source="play",
+                )
+                return resolution.to_dict()
+            resolution.warnings.append(
+                f"door_guard_partial_dispatch:{playback_result.dispatched_group_count}"
+            )
         data["last_triggered_by_event"][resolution.event_id] = datetime.now().isoformat()
         _record_and_publish_status(hass, data, resolution, outcome="played")
         fire_announcement_event(
@@ -428,6 +468,7 @@ async def _resolve_from_service_call(
         states=states,
         available_media=None,
         last_triggered_by_event=last_triggered_by_event,
+        door_suppression_until=data.get("door_suppression_until"),
     )
     preliminary = resolve_announcement(config, call.data[CONF_EVENT_ID], runtime)
     available_media = await async_available_media_for_resolution(hass, preliminary)
@@ -435,6 +476,7 @@ async def _resolve_from_service_call(
         states=states,
         available_media=available_media,
         last_triggered_by_event=last_triggered_by_event,
+        door_suppression_until=data.get("door_suppression_until"),
     )
     return resolve_announcement(config, call.data[CONF_EVENT_ID], validated_runtime)
 
@@ -481,16 +523,49 @@ def _refresh_presence_status(hass: HomeAssistant, data: dict[str, Any]) -> None:
     refresh_presence_status(data["status"], data["config"], _state_map(hass))
 
 
-def _handle_presence_state_change(hass: HomeAssistant, entry_id: str, event: Any) -> None:
-    """Schedule a presence refresh from any Home Assistant callback thread."""
+def _handle_state_change(hass: HomeAssistant, entry_id: str, event: Any) -> None:
+    """Schedule presence and door-guard refreshes on the HA event loop."""
 
     entity_id = event.data.get("entity_id")
+    old_state = getattr(event.data.get("old_state"), "state", None)
+    new_state = getattr(event.data.get("new_state"), "state", None)
     hass.loop.call_soon_threadsafe(
-        _refresh_presence_for_entity,
+        _refresh_for_state_change,
         hass,
         entry_id,
         entity_id,
+        old_state,
+        new_state,
     )
+
+
+def _refresh_for_state_change(
+    hass: HomeAssistant,
+    entry_id: str,
+    entity_id: str | None,
+    old_state: str | None,
+    new_state: str | None,
+) -> None:
+    """Apply runtime changes for one relevant Home Assistant entity."""
+
+    data = hass.data.get(DOMAIN, {}).get(entry_id)
+    if data is None:
+        return
+    changed = False
+    if entity_id in _presence_entity_ids(data["config"]):
+        _refresh_presence_status(hass, data)
+        changed = True
+    if entity_id == data["config"].door_guard.sensor_entity_id:
+        _update_door_guard_state(
+            hass,
+            entry_id,
+            data,
+            old_state=old_state,
+            new_state=new_state,
+        )
+        changed = True
+    if changed:
+        _publish_status_updated(hass, data)
 
 
 def _refresh_presence_for_entity(
@@ -507,6 +582,170 @@ def _refresh_presence_for_entity(
         return
     _refresh_presence_status(hass, data)
     _publish_status_updated(hass, data)
+
+
+def _initial_door_suppression_until(
+    config: AnnouncementConfig,
+    states: dict[str, str],
+    *,
+    now: datetime | None = None,
+) -> str | None:
+    """Start a fresh cooldown when HA loads while the configured door is open."""
+
+    sensor_entity_id = config.door_guard.sensor_entity_id
+    if (
+        not sensor_entity_id
+        or states.get(sensor_entity_id) != "on"
+        or config.door_guard.cooldown_seconds <= 0
+    ):
+        return None
+    now = now or datetime.now(timezone.utc)
+    return (now + timedelta(seconds=config.door_guard.cooldown_seconds)).isoformat()
+
+
+def _update_door_guard_state(
+    hass: HomeAssistant,
+    entry_id: str,
+    data: dict[str, Any],
+    *,
+    old_state: str | None,
+    new_state: str | None,
+    now: datetime | None = None,
+) -> None:
+    """Restart the cooldown on each closed-to-open door transition."""
+
+    config: AnnouncementConfig = data["config"]
+    now = now or datetime.now(timezone.utc)
+    if new_state == "on" and old_state != "on":
+        if config.door_guard.cooldown_seconds > 0:
+            data["door_suppression_until"] = (
+                now + timedelta(seconds=config.door_guard.cooldown_seconds)
+            ).isoformat()
+        else:
+            data["door_suppression_until"] = None
+        _schedule_door_guard_expiry(hass, entry_id, data, now=now)
+    _refresh_door_guard_status(hass, data, now=now)
+
+
+def _schedule_door_guard_expiry(
+    hass: HomeAssistant,
+    entry_id: str,
+    data: dict[str, Any],
+    *,
+    now: datetime | None = None,
+) -> None:
+    """Schedule a status refresh when the active cooldown expires."""
+
+    cancel_timer = data.get("door_guard_cancel_timer")
+    if callable(cancel_timer):
+        cancel_timer()
+    data["door_guard_cancel_timer"] = None
+    deadline = _deadline_datetime(data.get("door_suppression_until"))
+    if deadline is None or async_call_later is None:
+        return
+    now = now or datetime.now(timezone.utc)
+    delay = max(0.0, (_as_utc(deadline) - _as_utc(now)).total_seconds())
+    expected_deadline = data["door_suppression_until"]
+    data["door_guard_cancel_timer"] = async_call_later(
+        hass,
+        delay,
+        lambda _now, expected=expected_deadline: _expire_door_guard(
+            hass,
+            entry_id,
+            expected,
+        ),
+    )
+
+
+def _expire_door_guard(
+    hass: HomeAssistant,
+    entry_id: str,
+    expected_deadline: str | None,
+    *,
+    now: datetime | None = None,
+) -> None:
+    """Clear one still-current deadline and repaint diagnostic entities."""
+
+    data = hass.data.get(DOMAIN, {}).get(entry_id)
+    if data is None or data.get("door_suppression_until") != expected_deadline:
+        return
+    deadline = _deadline_datetime(expected_deadline)
+    now = now or datetime.now(timezone.utc)
+    if deadline is not None and _as_utc(deadline) > _as_utc(now):
+        _schedule_door_guard_expiry(hass, entry_id, data, now=now)
+        return
+    data["door_suppression_until"] = None
+    data["door_guard_cancel_timer"] = None
+    _refresh_door_guard_status(hass, data, now=now)
+    _publish_status_updated(hass, data)
+
+
+def _active_door_suppression(
+    hass: HomeAssistant,
+    data: dict[str, Any],
+    *,
+    event_id: str,
+    now: datetime | None = None,
+) -> tuple[str | None, str | None]:
+    """Return a last-moment approach suppression decision for playback."""
+
+    if event_id != "front_door_approach":
+        return None, None
+    config: AnnouncementConfig = data["config"]
+    resolution_reason, suppression_until, _warning = evaluate_door_guard(
+        config,
+        ResolverRuntime(
+            states=_state_map(hass),
+            door_suppression_until=data.get("door_suppression_until"),
+        ),
+        now=now,
+    )
+    return resolution_reason, suppression_until
+
+
+def _refresh_door_guard_status(
+    hass: HomeAssistant,
+    data: dict[str, Any],
+    *,
+    now: datetime | None = None,
+) -> None:
+    """Synchronise live door-guard diagnostics with current HA state."""
+
+    config: AnnouncementConfig = data["config"]
+    states = _state_map(hass)
+    reason, suppression_until, warning = evaluate_door_guard(
+        config,
+        ResolverRuntime(
+            states=states,
+            door_suppression_until=data.get("door_suppression_until"),
+        ),
+        now=now,
+    )
+    sensor_entity_id = config.door_guard.sensor_entity_id
+    status = data["status"]
+    status["approach_suppression_active"] = reason is not None
+    status["approach_suppression_until"] = suppression_until
+    status["approach_suppression_reason"] = reason
+    status["door_guard_sensor_entity_id"] = sensor_entity_id
+    status["door_guard_sensor_state"] = (
+        states.get(sensor_entity_id) if sensor_entity_id else None
+    )
+    status["door_guard_warning"] = warning
+
+
+def _deadline_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _as_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def _publish_status_updated(hass: HomeAssistant, data: dict[str, Any]) -> None:

@@ -100,7 +100,7 @@ class PlaybackTest(unittest.IsolatedAsyncioTestCase):
             volume_level=0.8,
         )
 
-        warnings = await play_music_assistant_announcement(hass, resolution)
+        result = await play_music_assistant_announcement(hass, resolution)
 
         music_calls = [
             call for call in hass.services.calls if call[0] == "music_assistant"
@@ -121,7 +121,11 @@ class PlaybackTest(unittest.IsolatedAsyncioTestCase):
         ]
         self.assertEqual(volume_calls[0][2]["volume_level"], 0.3)
         self.assertEqual(volume_calls[1][2]["volume_level"], 0.2)
-        self.assertIn("source_restore_unsupported:media_player.great_room", warnings)
+        self.assertIn(
+            "source_restore_unsupported:media_player.great_room",
+            result.warnings,
+        )
+        self.assertEqual(result.dispatched_group_count, 1)
 
     async def test_playback_passes_trigger_sound_as_pre_announce(self) -> None:
         hass = FakeHass()
@@ -165,6 +169,57 @@ class PlaybackTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(music_calls), 2)
         by_target = {call[4]["entity_id"][0]: call[2]["announce_volume"] for call in music_calls}
         self.assertEqual(by_target, {"media_player.great_room": 80, "media_player.bedroom": 40})
+
+    async def test_playback_cancels_before_first_group_when_door_guard_activates(self) -> None:
+        hass = FakeHass()
+        resolution = AnnouncementResolution(
+            event_id="front_door_approach",
+            ok=True,
+            media_path="media-source://media_source/local/announcements/front-door.mp3",
+            target_player_entity_ids=["media_player.great_room"],
+            volume_level=0.8,
+        )
+
+        result = await play_music_assistant_announcement(
+            hass,
+            resolution,
+            should_cancel=lambda: ("front_door_open", None),
+        )
+
+        self.assertEqual(result.dispatched_group_count, 0)
+        self.assertEqual(result.cancelled_reason, "front_door_open")
+        self.assertEqual(
+            [call for call in hass.services.calls if call[0] == "music_assistant"],
+            [],
+        )
+
+    async def test_playback_stops_remaining_groups_after_partial_dispatch(self) -> None:
+        hass = FakeHass()
+        resolution = AnnouncementResolution(
+            event_id="front_door_approach",
+            ok=True,
+            media_path="media-source://media_source/local/announcements/front-door.mp3",
+            target_player_entity_ids=["media_player.great_room", "media_player.bedroom"],
+            volume_level=0.8,
+            target_volume_levels={
+                "media_player.great_room": 0.8,
+                "media_player.bedroom": 0.4,
+            },
+        )
+        checks = iter([(None, None), ("recent_front_door_activity", "2026-08-01T00:00:00+00:00")])
+
+        result = await play_music_assistant_announcement(
+            hass,
+            resolution,
+            should_cancel=lambda: next(checks),
+        )
+
+        self.assertEqual(result.dispatched_group_count, 1)
+        self.assertEqual(result.cancelled_reason, "recent_front_door_activity")
+        self.assertEqual(
+            len([call for call in hass.services.calls if call[0] == "music_assistant"]),
+            1,
+        )
 
     async def test_playback_uses_signed_paths_when_home_assistant_supports_them(self) -> None:
         from custom_components.house_chime import playback

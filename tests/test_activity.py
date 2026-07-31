@@ -34,6 +34,7 @@ class ActivityTest(unittest.TestCase):
             active_context_id="david",
             target_player_entity_ids=["media_player.great_room"],
             quiet_active=True,
+            suppression_until="2026-08-01T00:03:00+00:00",
         )
 
         data = announcement_event_data(
@@ -47,6 +48,10 @@ class ActivityTest(unittest.TestCase):
         self.assertEqual(data["active_context_id"], "david")
         self.assertEqual(data["target_player_entity_ids"], ["media_player.great_room"])
         self.assertTrue(data["quiet_active"])
+        self.assertEqual(
+            data["suppression_until"],
+            "2026-08-01T00:03:00+00:00",
+        )
 
     def test_fire_announcement_event_only_uses_canonical_bus_event(self) -> None:
         hass = FakeHass()

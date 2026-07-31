@@ -27,6 +27,11 @@ SENSOR_DESCRIPTIONS = (
     StatusEntityDescription("playback_enabled_people", "Enabled listeners home", "mdi:account-check"),
     StatusEntityDescription("playback_disabled_people", "Muted listeners home", "mdi:account-off"),
     StatusEntityDescription("last_suppression_reason", "Last suppression reason", "mdi:volume-off"),
+    StatusEntityDescription(
+        "approach_suppression_until",
+        "Approach suppression until",
+        "mdi:timer-sand",
+    ),
     StatusEntityDescription("selected_target_zones", "Selected target zones", "mdi:speaker-multiple"),
     StatusEntityDescription("configured_daytime_volume", "Daytime announcement volume", "mdi:volume-high"),
     StatusEntityDescription("last_effective_volume", "Last effective announcement volume", "mdi:volume-medium"),
@@ -38,6 +43,11 @@ BINARY_SENSOR_DESCRIPTIONS = (
     StatusEntityDescription("integration_ready", "Integration ready", "mdi:check-circle"),
     StatusEntityDescription("quiet_mode_active", "Quiet mode active", "mdi:volume-low"),
     StatusEntityDescription("last_resolution_valid", "Last resolution valid", "mdi:check-decagram"),
+    StatusEntityDescription(
+        "approach_suppression_active",
+        "Approach suppression active",
+        "mdi:door-open",
+    ),
 )
 
 
@@ -81,6 +91,16 @@ def initial_status(
         "playback_enabled_people": [],
         "playback_disabled_people": [],
         "last_suppression_reason": None,
+        "approach_suppression_active": False,
+        "approach_suppression_until": None,
+        "approach_suppression_reason": None,
+        "door_guard_sensor_entity_id": config.door_guard.sensor_entity_id,
+        "door_guard_sensor_state": (
+            (states or {}).get(config.door_guard.sensor_entity_id)
+            if config.door_guard.sensor_entity_id
+            else None
+        ),
+        "door_guard_warning": None,
         "selected_target_zones": [zone.entity_id for zone in config.zones if zone.selected],
         "configured_daytime_volume": config.normal_volume,
         "last_effective_volume": None,

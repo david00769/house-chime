@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass
 from datetime import timedelta
 import logging
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import quote, unquote, urlsplit, urlunsplit
 
 from .discovery import (
@@ -31,11 +30,26 @@ class PlayerSnapshot:
     source: str | None
 
 
+@dataclass(frozen=True, slots=True)
+class PlaybackResult:
+    """Outcome from the Music Assistant dispatch boundary."""
+
+    warnings: tuple[str, ...] = ()
+    dispatched_group_count: int = 0
+    cancelled_reason: str | None = None
+    suppression_until: str | None = None
+
+
 class PlaybackMediaError(Exception):
     """Raised when a resolved media URL cannot be fetched by a server-side player."""
 
 
-async def play_music_assistant_announcement(hass: Any, resolution: AnnouncementResolution) -> list[str]:
+async def play_music_assistant_announcement(
+    hass: Any,
+    resolution: AnnouncementResolution,
+    *,
+    should_cancel: Callable[[], tuple[str | None, str | None]] | None = None,
+) -> PlaybackResult:
     """Play a resolved announcement through Music Assistant.
 
     This is the runtime boundary. The resolver decides what to play and where;
@@ -71,28 +85,38 @@ async def play_music_assistant_announcement(hass: Any, resolution: AnnouncementR
         await _assert_playback_url_reachable(hass, pre_announce_url, "pre_announce")
 
     warnings: list[str] = []
+    dispatched_group_count = 0
+    cancelled_reason = None
+    suppression_until = None
     try:
-        await asyncio.gather(
-            *(
-                hass.services.async_call(
-                    "music_assistant",
-                    "play_announcement",
-                    {
-                        **service_data,
-                        "announce_volume": int(round(volume_level * 100)),
-                    },
-                    blocking=True,
-                    target={"entity_id": entity_ids},
-                )
-                for volume_level, entity_ids in _target_volume_groups(resolution)
+        for volume_level, entity_ids in _target_volume_groups(resolution):
+            if should_cancel is not None:
+                cancelled_reason, suppression_until = should_cancel()
+                if cancelled_reason:
+                    break
+            await hass.services.async_call(
+                "music_assistant",
+                "play_announcement",
+                {
+                    **service_data,
+                    "announce_volume": int(round(volume_level * 100)),
+                },
+                blocking=True,
+                target={"entity_id": entity_ids},
             )
-        )
+            dispatched_group_count += 1
     except Exception:
         _LOGGER.exception("Music Assistant announcement playback failed")
         raise
     finally:
-        warnings.extend(await _restore_player_snapshots(hass, snapshots))
-    return warnings
+        if dispatched_group_count:
+            warnings.extend(await _restore_player_snapshots(hass, snapshots))
+    return PlaybackResult(
+        warnings=tuple(warnings),
+        dispatched_group_count=dispatched_group_count,
+        cancelled_reason=cancelled_reason,
+        suppression_until=suppression_until,
+    )
 
 
 def _target_volume_groups(

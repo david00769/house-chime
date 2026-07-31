@@ -7,10 +7,12 @@ Music Assistant/Juke playback.
 
 from __future__ import annotations
 
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 
 from .const import STATE_HOME, STATE_UNAVAILABLE, STATE_UNKNOWN
 from .models import AnnouncementConfig, AnnouncementResolution, ResolverRuntime
+
+APPROACH_EVENT_ID = "front_door_approach"
 
 
 def resolve_household_presence(
@@ -81,6 +83,20 @@ def resolve_announcement(
         resolution.ok = False
         resolution.errors.append(f"event_disabled:{event_id}")
         return resolution
+
+    if event_id == APPROACH_EVENT_ID:
+        suppression_reason, suppression_until, warning = evaluate_door_guard(
+            config,
+            runtime,
+            now=now,
+        )
+        if warning:
+            resolution.warnings.append(warning)
+        if suppression_reason:
+            resolution.suppressed = True
+            resolution.suppression_reason = suppression_reason
+            resolution.suppression_until = suppression_until
+            return resolution
 
     if _is_duplicate(event_id, event.duplicate_window_seconds, runtime, now):
         resolution.ok = False
@@ -192,6 +208,61 @@ def resolve_announcement(
     }
 
     return resolution
+
+
+def evaluate_door_guard(
+    config: AnnouncementConfig,
+    runtime: ResolverRuntime,
+    *,
+    now: datetime | None = None,
+) -> tuple[str | None, str | None, str | None]:
+    """Return the active door suppression reason, deadline, and warning.
+
+    Missing and unavailable sensors intentionally fail open. A deadline that
+    was already started by a valid open transition remains effective even if
+    the sensor later becomes unavailable.
+    """
+
+    sensor_entity_id = config.door_guard.sensor_entity_id
+    if not sensor_entity_id:
+        return None, None, None
+
+    now = now or datetime.now()
+    sensor_state = runtime.states.get(sensor_entity_id)
+    deadline = _parse_datetime(runtime.door_suppression_until)
+    deadline_active = bool(deadline and _datetime_is_after(deadline, now))
+    suppression_until = deadline.isoformat() if deadline_active and deadline else None
+
+    warning = None
+    if sensor_state is None:
+        warning = f"door_guard_sensor_missing:{sensor_entity_id}"
+    elif sensor_state in {STATE_UNAVAILABLE, STATE_UNKNOWN}:
+        warning = f"door_guard_sensor_{sensor_state}:{sensor_entity_id}"
+
+    if sensor_state == "on":
+        return "front_door_open", suppression_until, warning
+    if deadline_active:
+        return "recent_front_door_activity", suppression_until, warning
+    return None, None, warning
+
+
+def _parse_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _datetime_is_after(candidate: datetime, reference: datetime) -> bool:
+    """Compare datetimes safely across tests and HA timezone-aware runtime."""
+
+    if candidate.tzinfo is None and reference.tzinfo is not None:
+        candidate = candidate.replace(tzinfo=timezone.utc)
+    elif candidate.tzinfo is not None and reference.tzinfo is None:
+        reference = reference.replace(tzinfo=timezone.utc)
+    return candidate > reference
 
 
 def _active_context_id(

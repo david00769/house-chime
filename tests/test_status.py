@@ -8,10 +8,12 @@ from custom_components.house_chime.const import DOMAIN
 from custom_components.house_chime.models import (
     AnnouncementConfig,
     AnnouncementResolution,
+    DoorGuardConfig,
     PersonConfig,
     ZoneConfig,
 )
 from custom_components.house_chime.status import (
+    BINARY_SENSOR_DESCRIPTIONS,
     SENSOR_DESCRIPTIONS,
     initial_status,
     record_resolution,
@@ -27,6 +29,32 @@ class StatusTest(unittest.TestCase):
             status_entity_name(SENSOR_DESCRIPTIONS[0]),
             "House Chime Last resolved event",
         )
+        self.assertIn(
+            "approach_suppression_until",
+            {description.key for description in SENSOR_DESCRIPTIONS},
+        )
+        self.assertIn(
+            "approach_suppression_active",
+            {description.key for description in BINARY_SENSOR_DESCRIPTIONS},
+        )
+
+    def test_initial_status_exposes_door_guard_diagnostics(self) -> None:
+        config = AnnouncementConfig(
+            door_guard=DoorGuardConfig("binary_sensor.front_door", 180)
+        )
+
+        status = initial_status(
+            config,
+            {"binary_sensor.front_door": "off"},
+        )
+
+        self.assertFalse(status["approach_suppression_active"])
+        self.assertIsNone(status["approach_suppression_until"])
+        self.assertEqual(
+            status["door_guard_sensor_entity_id"],
+            "binary_sensor.front_door",
+        )
+        self.assertEqual(status["door_guard_sensor_state"], "off")
 
     def test_record_resolution_updates_lovelace_status_fields(self) -> None:
         status = initial_status(

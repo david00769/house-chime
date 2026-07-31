@@ -90,7 +90,8 @@ actions:
 ```
 
 Leave `skip_duplicate_suppression` unset or `false` in real source automations
-so duplicate doorbell/camera/package events are still suppressed.
+so duplicate doorbell/camera/package events are still suppressed. This option
+does not bypass door-aware Approach suppression.
 
 Use the `house_chime.announcement_activity` trigger only for follow-up
 automations after House Chime resolves, plays, or fails an announcement.
@@ -100,25 +101,17 @@ automations after House Chime resolves, plays, or fails an announcement.
 After installation, open `Settings -> Devices & services -> House Chime ->
 Configure`.
 
-The setup flow is intentionally operator-focused:
+The setup flow has four Home Assistant-native sections:
 
-- `Household people`: choose Home Assistant `person.*` entities. Any discovered
-  person can be configured; House Chime does not contain household names.
-- `Playback preferences`: choose a person and turn shared playback on or off
-  while they are home.
-- `Personalisation`: choose a person and event to set an optional voice or
-  pre-sound override.
-- `Priority`: rank enabled people who are home to choose the personalisation
-  used for shared playback.
-- `Playback and volume`: choose available Music Assistant announcement targets,
-  set the daytime announcement level, and optionally soften individual selected
-  speakers.
-- `Sounds`: select already-uploaded chime and announcement audio.
-- `Events`: enable and map voices for Approach, Package, and Doorbell.
-- `Bedtime / quiet hours`: set quiet hours, quiet volume, and speakers to skip
-  during bedtime.
-- `Advanced settings`: duplicate windows and raw advanced media settings.
-- `Review / Dry Run`: validate the setup without playing audio.
+- `Household`: people and presence, priority and fallback context, and
+  per-person playback preferences.
+- `Announcements`: Approach, Package, and Doorbell controls; per-person
+  personalisation; and event-first voice media configuration. Each event form
+  contains its enabled state, default voice, pre-sound, and duplicate window.
+- `Playback`: speakers, shared daytime volume, per-speaker overrides, bedtime
+  and quiet-hours behavior, and effective-volume summaries.
+- `Rules & diagnostics`: door-aware Approach suppression and Review / Dry Run
+  readiness, including the live door state, active reason, and expiry.
 
 Diagnostics remain available, but they are not part of the default setup path.
 
@@ -156,6 +149,33 @@ Status sensors also listen for House Chime status-update bus events so
 dashboards repaint after services such as `play`, `resolve`, and
 `set_speakers`.
 
+## Door-aware Approach suppression
+
+Select a front-door `binary_sensor` under `Rules & diagnostics`, then set the
+`After-door quiet time` from 0 to 3600 seconds. Leaving the sensor unselected
+disables the feature.
+
+Approach announcements are dropped while this sensor is open and for the
+configured time after it opens. Doorbell and package announcements continue.
+Suppressed attempts are never queued or replayed when the door closes or the
+timer expires, and they do not consume the duplicate window.
+
+Every closed-to-open transition restarts the cooldown. A zero-second cooldown
+suppresses only while the door remains open. After a Home Assistant restart,
+an open door starts a fresh cooldown; a closed door starts with no retained
+cooldown. Missing, unknown, or unavailable sensors fail open and create a
+configuration warning, while a cooldown already in progress remains effective.
+
+House Chime checks the guard again before each grouped Music Assistant
+dispatch. If no group has played, cancellation is reported as intentional
+suppression. If an earlier group was already accepted, remaining groups are
+cancelled and diagnostics record a partial-dispatch warning.
+
+The integration device exposes
+`binary_sensor.house_chime_approach_suppression_active` and
+`sensor.house_chime_approach_suppression_until` for dashboards and
+troubleshooting.
+
 ## Media
 
 House Chime consumes approved playable files that already exist in Home
@@ -165,7 +185,7 @@ V1 uses Home Assistant's built-in media upload/browser path:
 
 1. Open Home Assistant Media.
 2. Upload audio into Local Media, for example under `announcements/`.
-3. Return to House Chime `Configure -> Sounds`.
+3. Return to House Chime `Configure -> Announcements -> Voice media`.
 4. Select the uploaded media in the media picker.
 
 Advanced users can still provide raw `media-source://media_source/local/...`
@@ -212,9 +232,9 @@ targets selected in the current announcement.
 Music Assistant and Home Assistant can rename or recreate `media_player`
 entities after integration updates, device rediscovery, or restoring a backup.
 If House Chime reports a selected speaker as missing or incompatible, open
-`Settings -> Devices & services -> House Chime -> Configure -> Speakers` and
-reselect the current Music Assistant player. A successful dry run clears stale
-House Chime Repair issues for that event.
+`Settings -> Devices & services -> House Chime -> Configure -> Playback ->
+Speakers` and reselect the current Music Assistant player. A successful dry
+run clears stale House Chime Repair issues for that event.
 
 When saved speakers are missing, the Speakers form lists the stale entity IDs
 and shows best-effort current matches by friendly name or entity ID. These are
@@ -246,6 +266,10 @@ uv run python -m unittest discover -s tests
 
 This is an early beta integration. Run dry-run resolution and non-audible
 configuration checks first. Do not run live playback tests during quiet hours.
+
+For the reviewed local commit, eventual upstream push/tag, HACS update, and
+post-update validation sequence, use [the release and deployment
+runbook](docs/releasing.md).
 
 ## Public Repo Boundary
 

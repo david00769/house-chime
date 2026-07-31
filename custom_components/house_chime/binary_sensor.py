@@ -48,6 +48,14 @@ class HouseChimeStatusBinarySensor(BinarySensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         if self.description.key == "last_resolution_valid":
             return {"last_resolution": self._status.get("last_resolution")}
+        if self.description.key == "approach_suppression_active":
+            return {
+                "sensor_entity_id": self._status.get("door_guard_sensor_entity_id"),
+                "sensor_state": self._status.get("door_guard_sensor_state"),
+                "suppression_reason": self._status.get("approach_suppression_reason"),
+                "suppression_until": self._status.get("approach_suppression_until"),
+                "warning": self._status.get("door_guard_warning"),
+            }
         return {}
 
     async def async_added_to_hass(self) -> None:

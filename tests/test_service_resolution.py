@@ -12,6 +12,7 @@ from custom_components.house_chime.const import (
 )
 from custom_components.house_chime.models import (
     AnnouncementConfig,
+    DoorGuardConfig,
     EventConfig,
     PersonConfig,
     VoicePersonality,
@@ -77,6 +78,43 @@ def service_config() -> AnnouncementConfig:
 
 
 class ServiceResolutionTest(unittest.IsolatedAsyncioTestCase):
+    async def test_manual_duplicate_bypass_does_not_bypass_open_door_guard(self) -> None:
+        config = AnnouncementConfig(
+            door_guard=DoorGuardConfig("binary_sensor.front_door", 180),
+            events=[
+                EventConfig(
+                    id="front_door_approach",
+                    name="Approach",
+                    duplicate_window_seconds=45,
+                )
+            ],
+        )
+        data = {
+            "config": config,
+            "last_triggered_by_event": {
+                "front_door_approach": datetime.now().isoformat()
+            },
+            "door_suppression_until": None,
+        }
+        hass = FakeHass()
+        hass.states._states.append(FakeState("binary_sensor.front_door", "on"))
+        call = SimpleNamespace(
+            data={
+                CONF_EVENT_ID: "front_door_approach",
+                CONF_SKIP_DUPLICATE_SUPPRESSION: True,
+            }
+        )
+
+        with patch(
+            "custom_components.house_chime.async_available_media_for_resolution",
+            return_value=set(),
+        ):
+            resolution = await _resolve_from_service_call(hass, data, call)
+
+        self.assertTrue(resolution.ok)
+        self.assertTrue(resolution.suppressed)
+        self.assertEqual(resolution.suppression_reason, "front_door_open")
+
     async def test_service_resolution_respects_duplicate_suppression_by_default(self) -> None:
         now = datetime.now()
         data = {

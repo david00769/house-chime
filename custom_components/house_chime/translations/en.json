@@ -43,17 +43,37 @@
     "step": {
       "init": {
         "title": "House Chime setup",
-        "description": "Configure household presence, playback levels, sounds, events, bedtime rules, and a dry-run review.",
+        "description": "Configure household context, announcement behaviour, playback, and operating rules.",
         "menu_options": {
-          "people": "Household people",
-          "preferences": "Playback preferences",
-          "personalisation": "Personalisation",
-          "priority": "Priority",
-          "playback": "Playback and volume",
-          "media": "Sounds",
+          "household": "Household",
+          "announcements": "Announcements",
+          "playback": "Playback",
+          "rules": "Rules & diagnostics"
+        }
+      },
+      "household": {
+        "title": "Household",
+        "description": "Manage presence, context priority, and each person's shared-announcement preference.",
+        "menu_options": {
+          "people": "People & presence",
+          "priority": "Priority & fallback",
+          "preferences": "Per-person playback"
+        }
+      },
+      "announcements": {
+        "title": "Announcements",
+        "description": "Configure event behaviour, approved voice audio, and personalisation.",
+        "menu_options": {
           "events": "Events",
-          "quiet": "Bedtime / quiet hours",
-          "additional": "Advanced settings",
+          "personalisation": "Personalisation",
+          "media": "Voice audio"
+        }
+      },
+      "rules": {
+        "title": "Rules & diagnostics",
+        "description": "Control door-aware suppression and review the effective setup without playing audio.",
+        "menu_options": {
+          "door_guard": "Door-aware approach suppression",
           "review": "Review / Dry Run"
         }
       },
@@ -121,8 +141,14 @@
         }
       },
       "playback": {
-        "title": "Playback and volume",
-        "description": "Choose announcement speakers, set the shared daytime level, and adjust selected speakers when a room needs to be softer."
+        "title": "Playback",
+        "description": "Choose speakers, set daytime levels, adjust individual rooms, and configure bedtime playback.",
+        "menu_options": {
+          "zones": "Speakers",
+          "volume": "Daytime volume",
+          "zone_levels": "Per-speaker levels",
+          "quiet": "Bedtime / quiet hours"
+        }
       },
       "volume": {
         "title": "Daytime announcement volume",
@@ -152,12 +178,16 @@
         }
       },
       "media": {
-        "title": "Sounds",
-        "description": "Upload audio through Home Assistant Media / Local Media first, then select event audio and optional pre-sounds here.",
+        "title": "Voice audio",
+        "description": "Choose an event, then select its approved announcement file for each voice.",
         "data": {
-          "front_door_approach_common_trigger_sound": "Approach pre-sound",
-          "front_door_package_common_trigger_sound": "Package pre-sound",
-          "front_door_doorbell_common_trigger_sound": "Doorbell pre-sound",
+          "event_id": "Event"
+        }
+      },
+      "event_media": {
+        "title": "Voice audio",
+        "description": "Select the approved {event_name} announcement file for each voice. Upload files through Home Assistant Media / Local Media first.",
+        "data": {
           "eve_front_door_approach_media_path": "Eve - Approach announcement",
           "eve_front_door_package_media_path": "Eve - Package announcement",
           "eve_front_door_doorbell_media_path": "Eve - Doorbell button sound",
@@ -186,7 +216,12 @@
         "description": "Configure the shared default for Approach. Per-person overrides are in Personalisation.",
         "data": {
           "enabled": "Enable Approach",
-          "default_voice_id": "Default voice"
+          "default_voice_id": "Default voice",
+          "common_trigger_sound": "Pre-sound",
+          "duplicate_window_seconds": "Duplicate window"
+        },
+        "data_description": {
+          "duplicate_window_seconds": "Ignore repeated Approach detections for this many seconds."
         }
       },
       "event_front_door_package": {
@@ -194,7 +229,12 @@
         "description": "Configure the shared default for Package. Per-person overrides are in Personalisation.",
         "data": {
           "enabled": "Enable Package",
-          "default_voice_id": "Default voice"
+          "default_voice_id": "Default voice",
+          "common_trigger_sound": "Pre-sound",
+          "duplicate_window_seconds": "Duplicate window"
+        },
+        "data_description": {
+          "duplicate_window_seconds": "Ignore repeated Package detections for this many seconds."
         }
       },
       "event_front_door_doorbell": {
@@ -202,7 +242,12 @@
         "description": "Configure the shared default for Doorbell. Per-person overrides are in Personalisation.",
         "data": {
           "enabled": "Enable Doorbell",
-          "default_voice_id": "Default voice"
+          "default_voice_id": "Default voice",
+          "common_trigger_sound": "Pre-sound",
+          "duplicate_window_seconds": "Duplicate window"
+        },
+        "data_description": {
+          "duplicate_window_seconds": "Ignore repeated Doorbell events for this many seconds."
         }
       },
       "quiet": {
@@ -226,33 +271,21 @@
           "zone_end": "Leave blank to use the bedtime end time."
         }
       },
-      "additional": {
-        "title": "Advanced settings",
-        "description": "Configure duplicate suppression and raw media paths. Bedtime speaker exclusions are in Bedtime / quiet hours.",
+      "door_guard": {
+        "title": "Door-aware approach suppression",
+        "description": "Approach announcements are dropped while this sensor is open and for the configured time after it opens. Doorbell and package announcements continue.",
         "data": {
-          "front_door_approach_duplicate_window_seconds": "Approach duplicate window",
-          "front_door_package_duplicate_window_seconds": "Package duplicate window",
-          "front_door_doorbell_duplicate_window_seconds": "Doorbell duplicate window",
-          "front_door_approach_common_trigger_sound": "Raw Approach pre-sound path",
-          "front_door_package_common_trigger_sound": "Raw Package pre-sound path",
-          "front_door_doorbell_common_trigger_sound": "Raw Doorbell pre-sound path",
-          "eve_front_door_approach_media_path": "Raw Eve - Approach announcement path",
-          "eve_front_door_package_media_path": "Raw Eve - Package announcement path",
-          "eve_front_door_doorbell_media_path": "Raw Eve - Doorbell button sound path",
-          "leo_front_door_approach_media_path": "Raw Leo - Approach announcement path",
-          "leo_front_door_package_media_path": "Raw Leo - Package announcement path",
-          "leo_front_door_doorbell_media_path": "Raw Leo - Doorbell button sound path",
-          "pierce_front_door_approach_media_path": "Raw Pierce - Approach announcement path",
-          "pierce_front_door_package_media_path": "Raw Pierce - Package announcement path",
-          "pierce_front_door_doorbell_media_path": "Raw Pierce - Doorbell button sound path",
-          "samantha_front_door_approach_media_path": "Raw Samantha - Approach announcement path",
-          "samantha_front_door_package_media_path": "Raw Samantha - Package announcement path",
-          "samantha_front_door_doorbell_media_path": "Raw Samantha - Doorbell button sound path"
+          "sensor_entity_id": "Front door sensor",
+          "cooldown_seconds": "After-door quiet time"
+        },
+        "data_description": {
+          "sensor_entity_id": "Leave unselected to disable this rule. The binary sensor must report on while the door is open.",
+          "cooldown_seconds": "Seconds to suppress Approach after each closed-to-open transition. Use 0 to suppress only while the door is open."
         }
       },
       "review": {
         "title": "Review / Dry Run",
-        "description": "No audio will play from this step.\n\n{summary}\n\n{music_assistant}"
+        "description": "No audio will play from this step.\n\nDoor rule:\n{door_guard}\n\nEvents:\n{summary}\n\n{music_assistant}"
       }
     }
   }

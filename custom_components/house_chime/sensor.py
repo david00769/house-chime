@@ -58,6 +58,14 @@ class HouseChimeStatusSensor(SensorEntity):
             return {"zones": self._status.get("selected_target_zones", [])}
         if self.description.key == "last_failure_reason":
             return {"last_resolution": self._status.get("last_resolution")}
+        if self.description.key == "approach_suppression_until":
+            return {
+                "active": self._status.get("approach_suppression_active"),
+                "sensor_entity_id": self._status.get("door_guard_sensor_entity_id"),
+                "sensor_state": self._status.get("door_guard_sensor_state"),
+                "suppression_reason": self._status.get("approach_suppression_reason"),
+                "warning": self._status.get("door_guard_warning"),
+            }
         return {}
 
     async def async_added_to_hass(self) -> None:

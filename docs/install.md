@@ -10,25 +10,24 @@
 6. Restart Home Assistant.
 7. Add the integration from `Settings -> Devices & services`.
 
+For maintainers updating an existing HACS installation, follow the
+[release and deployment runbook](releasing.md). It covers the reviewed commit,
+upstream publication, HACS update, and safe post-update checks.
+
 ## Configure
 
-After adding the integration, open `Configure`. House Chime walks through:
+After adding the integration, open `Configure`. House Chime exposes four
+sections:
 
-- `Household people`: select Home Assistant people. The list is discovered from
-  `person.*`; House Chime does not hard-code household names.
-- `Playback preferences`: select any configured person and choose whether shared
-  playback is enabled while they are home.
-- `Personalisation`: select a person and event to configure their optional
-  voice and pre-sound override.
-- `Priority`: rank enabled people who are home to choose personalisation.
-- `Playback and volume`: select available Music Assistant announcement targets,
-  set the shared daytime volume, and optionally soften individual speakers.
-- `Sounds`: choose uploaded announcement and chime audio.
-- `Events`: enable Approach, Package, and Doorbell and choose voices.
-- `Bedtime / quiet hours`: configure quiet hours, quiet volume, and speakers
-  that should be skipped during bedtime.
-- `Advanced settings`: configure duplicate windows and raw advanced media paths.
-- `Review / Dry Run`: check the setup without playing audio.
+- `Household`: people and presence, priority and fallback context, and
+  per-person playback preferences.
+- `Announcements`: event controls, personalisation, and event-first voice media
+  configuration. Each Approach, Package, and Doorbell form contains its enabled
+  state, default voice, pre-sound, and duplicate window.
+- `Playback`: Music Assistant speakers, shared daytime volume, per-speaker
+  overrides, bedtime and quiet-hours behavior, and effective-volume summaries.
+- `Rules & diagnostics`: door-aware Approach suppression and Review / Dry Run,
+  including live door state, active reason, expiry, and readiness by event.
 
 Keep configuration entry points out of operator dashboards. A House Chime
 dashboard may show readiness, configured speaker status, presence/listener
@@ -58,11 +57,12 @@ existing media flow:
 
 1. Open Home Assistant Media.
 2. Upload MP3 audio to Local Media, for example `announcements/front-door.mp3`.
-3. Open `Settings -> Devices & services -> House Chime -> Configure -> Sounds`.
+3. Open `Settings -> Devices & services -> House Chime -> Configure ->
+   Announcements -> Voice media`.
 4. Select the uploaded files with the media picker.
 
-If the media picker is unavailable in a Home Assistant version, use Additional
-settings raw paths such as:
+If the media picker is unavailable in a Home Assistant version, enter a raw
+path in the same event-first voice media form, such as:
 
 ```text
 media-source://media_source/local/announcements/front-door.mp3
@@ -100,9 +100,9 @@ input/control entities that cannot be passed to `music_assistant.play_announceme
 
 If a Repair says a selected speaker is missing or incompatible after a Home
 Assistant, Music Assistant, restore, or device rediscovery event, re-open
-`Configure -> Speakers` and reselect the current Music Assistant player. Saved
-`media_player` entity IDs can change over time. After the event resolves
-cleanly, House Chime clears stale Repair issues for that event.
+`Configure -> Playback -> Speakers` and reselect the current Music Assistant
+player. Saved `media_player` entity IDs can change over time. After the event
+resolves cleanly, House Chime clears stale Repair issues for that event.
 
 The Speakers form shows missing saved speakers and suggested current matches
 when it can infer them from friendly names or entity IDs. Treat those
@@ -160,8 +160,30 @@ intended.
 
 Manual dashboard play-test buttons may pass
 `skip_duplicate_suppression: true` so a deliberate repeat test is not blocked
-by the event duplicate window. Leave that option off for real source
-automations.
+by the event duplicate window. It never bypasses door-aware Approach
+suppression. Leave that option off for real source automations.
+
+## Door-aware Approach suppression
+
+In `Configure -> Rules & diagnostics -> Door-aware approach suppression`,
+select a front-door `binary_sensor` and set `After-door quiet time` from 0 to
+3600 seconds. Leaving the sensor unselected disables this rule.
+
+Approach announcements are dropped while this sensor is open and for the
+configured time after it opens. Doorbell and package announcements continue.
+House Chime does not queue, defer, or replay suppressed attempts, and those
+attempts do not update duplicate-suppression history.
+
+Every closed-to-open transition restarts the cooldown. Zero seconds means
+open-door suppression only. A restart discards the prior deadline: if the door
+is currently open, House Chime establishes a fresh cooldown; if closed, no
+cooldown starts. A missing, unknown, or unavailable sensor fails open and is
+reported as a configuration warning. An already-running cooldown remains
+active.
+
+Review / Dry Run reports the live door state, active reason, UTC expiry, and
+event readiness. The integration device also exposes Approach suppression
+active and Approach suppression until entities.
 
 ## Automation Pattern
 

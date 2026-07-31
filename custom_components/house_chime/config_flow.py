@@ -20,14 +20,14 @@ from .discovery import (
 )
 from .models import (
     AnnouncementConfig,
+    DoorGuardConfig,
     EventConfig,
     PersonConfig,
     QuietConfig,
     ResolverRuntime,
-    VoicePersonality,
     ZoneConfig,
 )
-from .resolver import resolve_announcement
+from .resolver import evaluate_door_guard, resolve_announcement
 from .storage import migrate_config_dict
 
 NONE_VALUE = "__none__"
@@ -39,16 +39,10 @@ EVENT_LABELS = {
 }
 
 SETUP_MENU_OPTIONS = [
-    "people",
-    "preferences",
-    "personalisation",
-    "priority",
+    "household",
+    "announcements",
     "playback",
-    "media",
-    "events",
-    "quiet",
-    "additional",
-    "review",
+    "rules",
 ]
 
 
@@ -100,7 +94,31 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
 
         return self.async_show_menu(
             step_id="playback",
-            menu_options=["zones", "volume", "zone_levels"],
+            menu_options=["zones", "volume", "zone_levels", "quiet"],
+        )
+
+    async def async_step_household(self, user_input: dict[str, Any] | None = None):
+        """Group household presence and preference controls."""
+
+        return self.async_show_menu(
+            step_id="household",
+            menu_options=["people", "priority", "preferences"],
+        )
+
+    async def async_step_announcements(self, user_input: dict[str, Any] | None = None):
+        """Group event, audio, and personalisation controls."""
+
+        return self.async_show_menu(
+            step_id="announcements",
+            menu_options=["events", "personalisation", "media"],
+        )
+
+    async def async_step_rules(self, user_input: dict[str, Any] | None = None):
+        """Group suppression rules and non-audible diagnostics."""
+
+        return self.async_show_menu(
+            step_id="rules",
+            menu_options=["door_guard", "review"],
         )
 
     async def async_step_people(self, user_input: dict[str, Any] | None = None):
@@ -607,9 +625,14 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                     enabled=bool(user_input["enabled"]),
                     voice_by_context=dict(existing.voice_by_context),
                     default_voice_id=user_input.get("default_voice_id"),
-                    common_trigger_sound=existing.common_trigger_sound,
+                    common_trigger_sound=_media_value(user_input.get("common_trigger_sound")),
                     trigger_sound_by_context=dict(existing.trigger_sound_by_context),
-                    duplicate_window_seconds=existing.duplicate_window_seconds,
+                    duplicate_window_seconds=int(
+                        user_input.get(
+                            "duplicate_window_seconds",
+                            existing.duplicate_window_seconds,
+                        )
+                    ),
                 )
                 if existing.id == event_id
                 else existing
@@ -623,6 +646,21 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                 "default_voice_id",
                 default=event.default_voice_id or "samantha",
             ): selector.SelectSelector(selector.SelectSelectorConfig(options=voice_options)),
+            vol.Optional(
+                "common_trigger_sound",
+                default=_media_selector_default(event.common_trigger_sound),
+            ): _media_selector(),
+            vol.Optional(
+                "duplicate_window_seconds",
+                default=event.duplicate_window_seconds,
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0,
+                    max=3600,
+                    step=5,
+                    mode=selector.NumberSelectorMode.SLIDER,
+                )
+            ),
         }
         return self.async_show_form(
             step_id=step_id,
@@ -631,52 +669,58 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         )
 
     async def async_step_media(self, user_input: dict[str, Any] | None = None):
-        """Configure approved media paths for events and voices."""
+        """Choose one event whose voice media should be configured."""
 
         config = self._config()
-
         if user_input is not None:
-            events_by_id = {event.id: event for event in config.events}
-            for event_id in DEFAULT_EVENTS:
-                event = events_by_id[event_id]
-                event.common_trigger_sound = _media_value(
-                    user_input.get(_trigger_sound_field(event_id))
-                )
-            config.voices = [
-                VoicePersonality(
-                    id=voice.id,
-                    name=voice.name,
-                    source=voice.source,
-                    media_by_event={
-                        event_id: media_path
-                        for event_id in DEFAULT_EVENTS
-                        if (media_path := _media_value(user_input.get(_media_field(voice.id, event_id))))
-                    },
-                )
-                for voice in config.voices
-            ]
-            return self._save(config)
-
-        fields = {}
-        for event_id in DEFAULT_EVENTS:
-            event = next(event for event in config.events if event.id == event_id)
-            fields[
-                vol.Optional(
-                    _trigger_sound_field(event_id),
-                    default=_media_selector_default(event.common_trigger_sound),
-                )
-            ] = _media_selector()
-        for event_id in DEFAULT_EVENTS:
-            for voice in config.voices:
-                fields[
-                    vol.Optional(
-                        _media_field(voice.id, event_id),
-                        default=_media_selector_default(voice.media_by_event.get(event_id)),
-                    )
-                ] = _media_selector()
+            self._media_event_id = user_input["event_id"]
+            return await self.async_step_event_media()
         return self.async_show_form(
             step_id="media",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("event_id"): selector.SelectSelector(
+                        selector.SelectSelectorConfig(
+                            options=[
+                                selector.SelectOptionDict(
+                                    value=event_id,
+                                    label=_event_label(event_id),
+                                )
+                                for event_id in DEFAULT_EVENTS
+                            ]
+                        )
+                    )
+                }
+            ),
+        )
+
+    async def async_step_event_media(self, user_input: dict[str, Any] | None = None):
+        """Configure every approved voice file for one event."""
+
+        config = self._config()
+        event_id = getattr(self, "_media_event_id", None)
+        if event_id not in DEFAULT_EVENTS:
+            return await self.async_step_media()
+        if user_input is not None:
+            for voice in config.voices:
+                field = _media_field(voice.id, event_id)
+                value = _media_value(user_input.get(field))
+                if value:
+                    voice.media_by_event[event_id] = value
+                else:
+                    voice.media_by_event.pop(event_id, None)
+            return self._save(config)
+        fields = {
+            vol.Optional(
+                _media_field(voice.id, event_id),
+                default=_media_selector_default(voice.media_by_event.get(event_id)),
+            ): _media_selector()
+            for voice in config.voices
+        }
+        return self.async_show_form(
+            step_id="event_media",
             data_schema=vol.Schema(fields),
+            description_placeholders={"event_name": _event_label(event_id)},
         )
 
     async def async_step_voice_media(self, user_input: dict[str, Any] | None = None):
@@ -685,48 +729,45 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
         return await self.async_step_media(user_input)
 
     async def async_step_additional(self, user_input: dict[str, Any] | None = None):
-        """Configure duplicate windows and raw advanced media overrides."""
+        """Compatibility alias for removed advanced-settings links."""
+
+        return await self.async_step_events()
+
+    async def async_step_door_guard(self, user_input: dict[str, Any] | None = None):
+        """Configure door-aware approach-announcement suppression."""
 
         config = self._config()
-        events_by_id = {event.id: event for event in config.events}
-
         if user_input is not None:
-            for event_id in DEFAULT_EVENTS:
-                event = events_by_id[event_id]
-                if _trigger_sound_field(event_id) in user_input:
-                    event.common_trigger_sound = _media_value(user_input.get(_trigger_sound_field(event_id)))
-                event.duplicate_window_seconds = int(user_input[_duplicate_window_field(event_id)])
-            for voice in config.voices:
-                for event_id in DEFAULT_EVENTS:
-                    field = _media_field(voice.id, event_id)
-                    if field in user_input:
-                        value = _media_value(user_input.get(field))
-                        if value:
-                            voice.media_by_event[event_id] = value
-                        else:
-                            voice.media_by_event.pop(event_id, None)
+            config.door_guard = DoorGuardConfig(
+                sensor_entity_id=user_input.get("sensor_entity_id") or None,
+                cooldown_seconds=int(user_input["cooldown_seconds"]),
+            )
             return self._save(config)
 
-        fields = {}
-        for event_id in DEFAULT_EVENTS:
-            event = events_by_id[event_id]
-            fields[vol.Optional(_trigger_sound_field(event_id), default=event.common_trigger_sound or "")] = str
-            fields[
-                vol.Optional(
-                    _duplicate_window_field(event_id),
-                    default=event.duplicate_window_seconds,
+        sensor_field = vol.Optional("sensor_entity_id")
+        if config.door_guard.sensor_entity_id:
+            sensor_field = vol.Optional(
+                "sensor_entity_id",
+                default=config.door_guard.sensor_entity_id,
+            )
+        fields = {
+            sensor_field: selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="binary_sensor")
+            ),
+            vol.Required(
+                "cooldown_seconds",
+                default=config.door_guard.cooldown_seconds,
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0,
+                    max=3600,
+                    step=10,
+                    mode=selector.NumberSelectorMode.SLIDER,
                 )
-            ] = vol.All(vol.Coerce(int), vol.Range(min=0, max=3600))
-            for voice in config.voices:
-                fields[
-                    vol.Optional(
-                        _media_field(voice.id, event_id),
-                        default=voice.media_by_event.get(event_id, ""),
-                    )
-                ] = str
-
+            ),
+        }
         return self.async_show_form(
-            step_id="additional",
+            step_id="door_guard",
             data_schema=vol.Schema(fields),
         )
 
@@ -738,15 +779,37 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
             return self._save(config)
 
         states = {state.entity_id: state.state for state in self.hass.states.async_all()}
+        door_reason, door_until, door_warning = evaluate_door_guard(
+            config,
+            ResolverRuntime(
+                states=states,
+                door_suppression_until=self._door_suppression_until(),
+            ),
+        )
         summaries = []
         for event_id in DEFAULT_EVENTS:
             resolution = resolve_announcement(
                 config,
                 event_id,
-                ResolverRuntime(states=states, available_media=None),
+                ResolverRuntime(
+                    states=states,
+                    available_media=None,
+                    door_suppression_until=self._door_suppression_until(),
+                ),
             )
-            status = "ready" if resolution.ok else "needs setup"
-            detail = ", ".join(resolution.errors or resolution.warnings or ["ok"])
+            status = (
+                "suppressed"
+                if resolution.suppressed
+                else "ready"
+                if resolution.ok
+                else "needs setup"
+            )
+            detail = ", ".join(
+                resolution.errors
+                or ([resolution.suppression_reason] if resolution.suppression_reason else [])
+                or resolution.warnings
+                or ["ok"]
+            )
             summaries.append(f"{_event_label(event_id)}: {status} ({detail})")
         services = getattr(self.hass, "services", None)
         has_music_assistant = True
@@ -757,12 +820,28 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
             if has_music_assistant
             else "Music Assistant announcement service was not found."
         )
+        sensor_entity_id = config.door_guard.sensor_entity_id
+        if not sensor_entity_id:
+            door_summary = "Door-aware approach suppression is not configured."
+        else:
+            sensor_state = states.get(sensor_entity_id, "missing")
+            door_summary = (
+                f"{sensor_entity_id}: {sensor_state}; "
+                + (
+                    f"active ({door_reason})"
+                    if door_reason
+                    else "not currently suppressing"
+                )
+                + (f"; until {door_until}" if door_until else "")
+                + (f"; warning {door_warning}" if door_warning else "")
+            )
         return self.async_show_form(
             step_id="review",
             data_schema=vol.Schema({}),
             description_placeholders={
                 "summary": "\n".join(summaries),
                 "music_assistant": service_summary,
+                "door_guard": door_summary,
             },
         )
 
@@ -776,6 +855,13 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
     def _save(self, config: AnnouncementConfig):
         migrated, _ = migrate_config_dict(config.to_dict())
         return self.async_create_entry(title="", data={CONF_ACTIVE_CONFIG: migrated})
+
+    def _door_suppression_until(self) -> str | None:
+        """Return the current entry's in-memory deadline when options are live."""
+
+        entry_id = getattr(self.config_entry, "entry_id", None)
+        domain_data = getattr(self.hass, "data", {}).get(DOMAIN, {})
+        return (domain_data.get(entry_id) or {}).get("door_suppression_until")
 
 
 def _options(records, *, include_entity_id: bool = False) -> list[selector.SelectOptionDict]:
@@ -890,20 +976,8 @@ def _id_from_entity(entity_id: str) -> str:
     return entity_id.split(".", 1)[-1]
 
 
-def _voice_field(event_id: str, person_id: str) -> str:
-    return f"{event_id}_{person_id}_voice_id"
-
-
 def _media_field(voice_id: str, event_id: str) -> str:
     return f"{voice_id}_{event_id}_media_path"
-
-
-def _trigger_sound_field(event_id: str) -> str:
-    return f"{event_id}_common_trigger_sound"
-
-
-def _duplicate_window_field(event_id: str) -> str:
-    return f"{event_id}_duplicate_window_seconds"
 
 
 def _event_label(event_id: str) -> str:

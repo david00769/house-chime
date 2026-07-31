@@ -6,7 +6,7 @@ from typing import Any
 
 from .const import DEFAULT_EVENTS, DEFAULT_VOICES
 
-CURRENT_CONFIG_VERSION = 3
+CURRENT_CONFIG_VERSION = 4
 
 DEFAULT_EVENT_NAMES = {
     "front_door_approach": "Front door approach",
@@ -51,6 +51,17 @@ def migrate_config_dict(data: dict[str, Any] | None) -> tuple[dict[str, Any], bo
                 zone["volume_multiplier"] = 1.0
                 changed = True
         config["version"] = 3
+        changed = True
+
+    if config["version"] < 4:
+        config.setdefault(
+            "door_guard",
+            {
+                "sensor_entity_id": None,
+                "cooldown_seconds": 180,
+            },
+        )
+        config["version"] = 4
         changed = True
 
     if config["version"] < CURRENT_CONFIG_VERSION:
@@ -110,4 +121,18 @@ def migrate_config_dict(data: dict[str, Any] | None) -> tuple[dict[str, Any], bo
         },
     )
     config.setdefault("normal_volume", 0.8)
+    raw_door_guard = config.get("door_guard")
+    if not isinstance(raw_door_guard, dict):
+        raw_door_guard = {}
+    try:
+        cooldown_seconds = int(raw_door_guard.get("cooldown_seconds", 180))
+    except (TypeError, ValueError):
+        cooldown_seconds = 180
+    normalised_door_guard = {
+        "sensor_entity_id": raw_door_guard.get("sensor_entity_id") or None,
+        "cooldown_seconds": max(0, min(3600, cooldown_seconds)),
+    }
+    if config.get("door_guard") != normalised_door_guard:
+        config["door_guard"] = normalised_door_guard
+        changed = True
     return config, changed

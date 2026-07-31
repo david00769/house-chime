@@ -26,6 +26,10 @@ views:
             name: Muted listeners home
           - entity: sensor.house_chime_last_suppression_reason
             name: Last intentional suppression
+          - entity: binary_sensor.house_chime_approach_suppression_active
+            name: Approach suppression active
+          - entity: sensor.house_chime_approach_suppression_until
+            name: Approach suppression until
           - entity: binary_sensor.house_chime_quiet_mode_active
             name: Quiet mode active
           - entity: sensor.house_chime_daytime_announcement_volume

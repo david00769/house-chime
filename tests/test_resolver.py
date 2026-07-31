@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 from custom_components.house_chime.models import (
     AnnouncementConfig,
+    DoorGuardConfig,
     EventConfig,
     PersonConfig,
     QuietConfig,
@@ -52,7 +53,8 @@ def sample_config() -> AnnouncementConfig:
                 name="Pierce",
                 source="chatterbox",
                 media_by_event={
-                    "front_door_package": "media-source://media_source/local/announcements/pierce-package.mp3"
+                    "front_door_package": "media-source://media_source/local/announcements/pierce-package.mp3",
+                    "front_door_doorbell": "media-source://media_source/local/announcements/pierce-doorbell.mp3",
                 },
             ),
         ],
@@ -68,6 +70,11 @@ def sample_config() -> AnnouncementConfig:
                 name="Front door package",
                 default_voice_id="pierce",
             ),
+            EventConfig(
+                id="front_door_doorbell",
+                name="Front door doorbell",
+                default_voice_id="pierce",
+            ),
         ],
         quiet=QuietConfig(enabled=True, start="22:00", end="08:00", volume_multiplier=0.5),
         normal_volume=0.8,
@@ -75,6 +82,176 @@ def sample_config() -> AnnouncementConfig:
 
 
 class ResolverTest(unittest.TestCase):
+    def test_open_door_intentionally_suppresses_approach_before_media_validation(self) -> None:
+        config = sample_config()
+        config.door_guard = DoorGuardConfig("binary_sensor.front_door", 180)
+        runtime = ResolverRuntime(
+            states={"binary_sensor.front_door": "on"},
+            available_media=set(),
+        )
+
+        resolution = resolve_announcement(
+            config,
+            "front_door_approach",
+            runtime,
+            now=datetime.fromisoformat("2026-05-15T14:00:00+00:00"),
+        )
+
+        self.assertTrue(resolution.ok)
+        self.assertTrue(resolution.suppressed)
+        self.assertEqual(resolution.suppression_reason, "front_door_open")
+        self.assertEqual(resolution.errors, [])
+
+    def test_recent_door_activity_suppresses_approach_until_deadline(self) -> None:
+        config = sample_config()
+        config.door_guard = DoorGuardConfig("binary_sensor.front_door", 180)
+        now = datetime.fromisoformat("2026-05-15T14:00:00+00:00")
+        deadline = (now + timedelta(seconds=90)).isoformat()
+        runtime = ResolverRuntime(
+            states={"binary_sensor.front_door": "off"},
+            door_suppression_until=deadline,
+        )
+
+        resolution = resolve_announcement(
+            config,
+            "front_door_approach",
+            runtime,
+            now=now,
+        )
+
+        self.assertTrue(resolution.ok)
+        self.assertTrue(resolution.suppressed)
+        self.assertEqual(
+            resolution.suppression_reason,
+            "recent_front_door_activity",
+        )
+        self.assertEqual(resolution.suppression_until, deadline)
+
+    def test_expired_door_deadline_allows_approach(self) -> None:
+        config = sample_config()
+        config.door_guard = DoorGuardConfig("binary_sensor.front_door", 180)
+        now = datetime.fromisoformat("2026-05-15T14:00:00+00:00")
+        runtime = ResolverRuntime(
+            states={
+                "binary_sensor.front_door": "off",
+                "person.david": "home",
+                "media_player.great_room": "idle",
+                "media_player.bedroom": "idle",
+            },
+            available_media={
+                "media-source://media_source/local/announcements/samantha-front-door.mp3",
+                "media-source://media_source/local/announcements/axel-f.mp3",
+            },
+            door_suppression_until=(now - timedelta(seconds=1)).isoformat(),
+        )
+
+        resolution = resolve_announcement(
+            config,
+            "front_door_approach",
+            runtime,
+            now=now,
+        )
+
+        self.assertTrue(resolution.ok)
+        self.assertFalse(resolution.suppressed)
+
+    def test_door_guard_never_suppresses_package_or_doorbell(self) -> None:
+        config = sample_config()
+        config.door_guard = DoorGuardConfig("binary_sensor.front_door", 180)
+        runtime = ResolverRuntime(
+            states={
+                "binary_sensor.front_door": "on",
+                "person.claudette": "home",
+                "media_player.great_room": "idle",
+                "media_player.bedroom": "idle",
+            },
+            available_media={
+                "media-source://media_source/local/announcements/pierce-package.mp3",
+                "media-source://media_source/local/announcements/pierce-doorbell.mp3",
+            },
+        )
+
+        for event_id in ("front_door_package", "front_door_doorbell"):
+            with self.subTest(event_id=event_id):
+                resolution = resolve_announcement(
+                    config,
+                    event_id,
+                    runtime,
+                    now=datetime.fromisoformat("2026-05-15T14:00:00"),
+                )
+
+                self.assertTrue(resolution.ok)
+                self.assertFalse(resolution.suppressed)
+
+    def test_missing_unknown_and_unavailable_door_sensor_fail_open_with_warning(self) -> None:
+        config = sample_config()
+        config.door_guard = DoorGuardConfig("binary_sensor.front_door", 180)
+        for sensor_state, warning_kind in (
+            (None, "missing"),
+            ("unknown", "unknown"),
+            ("unavailable", "unavailable"),
+        ):
+            with self.subTest(sensor_state=sensor_state):
+                states = {
+                    "person.david": "home",
+                    "media_player.great_room": "idle",
+                    "media_player.bedroom": "idle",
+                }
+                if sensor_state is not None:
+                    states["binary_sensor.front_door"] = sensor_state
+                runtime = ResolverRuntime(
+                    states=states,
+                    available_media={
+                        "media-source://media_source/local/announcements/samantha-front-door.mp3",
+                        "media-source://media_source/local/announcements/axel-f.mp3",
+                    },
+                )
+
+                resolution = resolve_announcement(
+                    config,
+                    "front_door_approach",
+                    runtime,
+                    now=datetime.fromisoformat("2026-05-15T14:00:00"),
+                )
+
+                self.assertTrue(resolution.ok)
+                self.assertFalse(resolution.suppressed)
+                self.assertIn(
+                    (
+                        f"door_guard_sensor_{warning_kind}:"
+                        "binary_sensor.front_door"
+                    ),
+                    resolution.warnings,
+                )
+
+    def test_unavailable_sensor_does_not_cancel_an_existing_cooldown(self) -> None:
+        config = sample_config()
+        config.door_guard = DoorGuardConfig("binary_sensor.front_door", 180)
+        now = datetime.fromisoformat("2026-05-15T14:00:00+00:00")
+        deadline = (now + timedelta(seconds=90)).isoformat()
+
+        resolution = resolve_announcement(
+            config,
+            "front_door_approach",
+            ResolverRuntime(
+                states={"binary_sensor.front_door": "unavailable"},
+                door_suppression_until=deadline,
+            ),
+            now=now,
+        )
+
+        self.assertTrue(resolution.ok)
+        self.assertTrue(resolution.suppressed)
+        self.assertEqual(
+            resolution.suppression_reason,
+            "recent_front_door_activity",
+        )
+        self.assertEqual(resolution.suppression_until, deadline)
+        self.assertIn(
+            "door_guard_sensor_unavailable:binary_sensor.front_door",
+            resolution.warnings,
+        )
+
     def test_resolves_active_person_voice_media_and_targets(self) -> None:
         config = sample_config()
         runtime = ResolverRuntime(

@@ -7,7 +7,12 @@ from types import SimpleNamespace
 
 from custom_components.house_chime.config_flow import HouseChimeConfigFlow, HouseChimeOptionsFlow
 from custom_components.house_chime.const import CONF_ACTIVE_CONFIG, DEFAULT_EVENTS
-from custom_components.house_chime.models import AnnouncementConfig, PersonConfig, ZoneConfig
+from custom_components.house_chime.models import (
+    AnnouncementConfig,
+    DoorGuardConfig,
+    PersonConfig,
+    ZoneConfig,
+)
 from conftest import FakeState, make_fake_hass
 
 ANNOUNCEMENT_FEATURES = 512 | 1048576
@@ -105,18 +110,20 @@ def test_options_flow_init_uses_guided_setup_menu() -> None:
 
     result = asyncio.run(flow.async_step_init())
 
-    assert result["menu_options"] == [
-        "people",
-        "preferences",
-        "personalisation",
-        "priority",
-        "playback",
-        "media",
-        "events",
-        "quiet",
-        "additional",
-        "review",
-    ]
+    assert result["menu_options"] == ["household", "announcements", "playback", "rules"]
+
+
+def test_options_flow_top_level_sections_have_focused_native_submenus() -> None:
+    entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: AnnouncementConfig().to_dict()}, options={})
+    flow = make_options_flow(entry)
+
+    household = asyncio.run(flow.async_step_household())
+    announcements = asyncio.run(flow.async_step_announcements())
+    rules = asyncio.run(flow.async_step_rules())
+
+    assert household["menu_options"] == ["people", "priority", "preferences"]
+    assert announcements["menu_options"] == ["events", "personalisation", "media"]
+    assert rules["menu_options"] == ["door_guard", "review"]
 
 
 def test_options_flow_playback_menu_contains_volume_and_second_level_target_controls() -> None:
@@ -125,7 +132,7 @@ def test_options_flow_playback_menu_contains_volume_and_second_level_target_cont
 
     result = asyncio.run(flow.async_step_playback())
 
-    assert result["menu_options"] == ["zones", "volume", "zone_levels"]
+    assert result["menu_options"] == ["zones", "volume", "zone_levels", "quiet"]
 
 
 def test_options_flow_volume_step_persists_daytime_level_and_preview() -> None:
@@ -181,7 +188,7 @@ def test_options_flow_does_not_assign_home_assistant_config_entry_property() -> 
 
     flow = FlowWithReadOnlyConfigEntry()
 
-    assert flow._config().to_dict()["version"] == 3
+    assert flow._config().to_dict()["version"] == 4
 
 
 def test_options_flow_media_step_persists_media_selector_paths() -> None:
@@ -190,12 +197,15 @@ def test_options_flow_media_step_persists_media_selector_paths() -> None:
     flow = make_options_flow(entry)
     flow.hass = make_fake_hass([])
 
+    selection = asyncio.run(
+        flow.async_step_media({"event_id": "front_door_approach"})
+    )
+    assert selection["step_id"] == "event_media"
+    assert selection["description_placeholders"]["event_name"] == "Approach"
+
     result = asyncio.run(
-        flow.async_step_media(
-        {
-            "front_door_approach_common_trigger_sound": {
-                "media_content_id": "media-source://media_source/local/chimes/doorbell.mp3"
-            },
+        flow.async_step_event_media(
+            {
             "samantha_front_door_approach_media_path": (
                 {
                     "media_content_id": (
@@ -203,14 +213,7 @@ def test_options_flow_media_step_persists_media_selector_paths() -> None:
                     )
                 }
             ),
-            "samantha_front_door_package_media_path": (
-                {
-                    "media_content_id": (
-                        "media-source://media_source/local/announcements/package.mp3"
-                    )
-                }
-            ),
-        }
+            }
         )
     )
 
@@ -218,15 +221,7 @@ def test_options_flow_media_step_persists_media_selector_paths() -> None:
     samantha = next(voice for voice in voices if voice["id"] == "samantha")
     assert samantha["media_by_event"] == {
         "front_door_approach": "media-source://media_source/local/announcements/front-door.mp3",
-        "front_door_package": "media-source://media_source/local/announcements/package.mp3",
     }
-    approach = next(
-        event for event in result["data"][CONF_ACTIVE_CONFIG]["events"]
-        if event["id"] == "front_door_approach"
-    )
-    assert approach["common_trigger_sound"] == (
-        "media-source://media_source/local/chimes/doorbell.mp3"
-    )
 
 
 def test_options_flow_event_step_preserves_personalisation() -> None:
@@ -245,6 +240,10 @@ def test_options_flow_event_step_preserves_personalisation() -> None:
             {
                 "enabled": True,
                 "default_voice_id": "samantha",
+                "common_trigger_sound": {
+                    "media_content_id": "media-source://media_source/local/chimes/package.mp3"
+                },
+                "duplicate_window_seconds": 60,
             }
         )
     )
@@ -258,6 +257,10 @@ def test_options_flow_event_step_preserves_personalisation() -> None:
         if event["id"] == "front_door_approach"
     )
     assert package["enabled"] is True
+    assert package["duplicate_window_seconds"] == 60
+    assert package["common_trigger_sound"] == (
+        "media-source://media_source/local/chimes/package.mp3"
+    )
     assert package["default_voice_id"] == "samantha"
     assert package["voice_by_context"] == {}
     assert approach["voice_by_context"] == {}
@@ -583,15 +586,11 @@ def test_options_flow_zones_filters_to_compatible_targets_and_keeps_bedtime_cont
     }
 
     additional_result = asyncio.run(flow.async_step_additional())
-    additional_fields = {
-        getattr(field, "schema", field): validator
-        for field, validator in additional_result["data_schema"].schema.items()
-    }
-    assert "selected_zones_all" not in additional_fields
-    assert "quiet_excluded_zones" not in additional_fields
+    assert additional_result["type"] == "menu"
+    assert additional_result["step_id"] == "events"
 
 
-def test_options_flow_additional_persists_duplicate_windows_without_changing_quiet_rules() -> None:
+def test_event_form_persists_duplicate_window_without_changing_quiet_rules() -> None:
     config = AnnouncementConfig(
         people=[PersonConfig(id="david", name="David", entity_id="person.david")],
         zones=[ZoneConfig(entity_id="media_player.great_room", name="Great Room", selected=True)],
@@ -611,11 +610,12 @@ def test_options_flow_additional_persists_duplicate_windows_without_changing_qui
     )
 
     result = asyncio.run(
-        flow.async_step_additional(
+        flow.async_step_event_front_door_package(
             {
-                "front_door_approach_duplicate_window_seconds": 45,
-                "front_door_package_duplicate_window_seconds": 60,
-                "front_door_doorbell_duplicate_window_seconds": 45,
+                "enabled": True,
+                "default_voice_id": "samantha",
+                "common_trigger_sound": {},
+                "duplicate_window_seconds": 60,
             }
         )
     )
@@ -628,21 +628,70 @@ def test_options_flow_additional_persists_duplicate_windows_without_changing_qui
     assert package["duplicate_window_seconds"] == 60
 
 
+def test_options_flow_door_guard_uses_binary_sensor_and_persists_duration() -> None:
+    config = AnnouncementConfig()
+    entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: config.to_dict()}, options={})
+    flow = make_options_flow(entry)
+    flow.hass = make_fake_hass(
+        [FakeState("binary_sensor.front_door", "off", "Front Door")]
+    )
+
+    form = asyncio.run(flow.async_step_door_guard())
+    fields = {
+        getattr(field, "schema", field): validator
+        for field, validator in form["data_schema"].schema.items()
+    }
+    assert fields["sensor_entity_id"].config.kwargs["domain"] == "binary_sensor"
+
+    result = asyncio.run(
+        flow.async_step_door_guard(
+            {
+                "sensor_entity_id": "binary_sensor.front_door",
+                "cooldown_seconds": 180,
+            }
+        )
+    )
+
+    assert result["data"][CONF_ACTIVE_CONFIG]["door_guard"] == {
+        "sensor_entity_id": "binary_sensor.front_door",
+        "cooldown_seconds": 180,
+    }
+
+
 def test_options_flow_review_reports_non_audible_setup_status() -> None:
     config = AnnouncementConfig(
         people=[PersonConfig(id="david", name="David", entity_id="person.david")],
         person_priority=["david"],
+        door_guard=DoorGuardConfig("binary_sensor.front_door", 180),
     )
-    entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: config.to_dict()}, options={})
+    entry = SimpleNamespace(
+        entry_id="entry-1",
+        data={CONF_ACTIVE_CONFIG: config.to_dict()},
+        options={},
+    )
     flow = make_options_flow(entry)
-    flow.hass = make_fake_hass([FakeState("person.david", "home", "David")])
+    flow.hass = make_fake_hass(
+        [
+            FakeState("person.david", "home", "David"),
+            FakeState("binary_sensor.front_door", "on", "Front Door"),
+        ]
+    )
+    flow.hass.data = {
+        "house_chime": {
+            "entry-1": {
+                "door_suppression_until": "2099-08-01T00:03:00+00:00",
+            }
+        }
+    }
 
     result = asyncio.run(flow.async_step_review())
 
     assert result["type"] == "form"
     assert result["step_id"] == "review"
-    assert "Approach: needs setup" in result["description_placeholders"]["summary"]
+    assert "Approach: suppressed (front_door_open)" in result["description_placeholders"]["summary"]
     assert "missing_media_mapping" in result["description_placeholders"]["summary"]
+    assert "active (front_door_open)" in result["description_placeholders"]["door_guard"]
+    assert "2099-08-01T00:03:00+00:00" in result["description_placeholders"]["door_guard"]
 
 
 def test_default_translated_labels_do_not_expose_raw_setup_keys() -> None:
