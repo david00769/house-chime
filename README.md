@@ -54,9 +54,11 @@ or `house_chime.play` from an automation triggered by that same sensor. Doing
 so creates competing paths for one encounter and can bypass the intended
 loitering policy. House Chime does not create, reset, or infer helper entities.
 
-For a complete source-selection guide, including a Google Home / Nest event
-bridge and the difference between a person event and continuous person
-presence, see [Front-door event routing](docs/front-door-event-routing.md).
+For the current Approach safe hold, Google Home / Nest source limitation, and
+the required continuous-presence infrastructure, see [Front-door event
+routing](docs/front-door-event-routing.md). Approach remains disabled until a
+source can report both person-present and person-left state, rather than a
+one-shot detection event.
 
 Use `set_speakers` from HA Services when an operator or support workflow needs
 to replace the saved speaker list without opening the options form. The service

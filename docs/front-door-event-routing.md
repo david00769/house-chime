@@ -5,6 +5,11 @@ It separates *what a source detected* from *what should be announced*, so a
 camera's general motion never becomes a spoken visitor announcement by
 accident.
 
+> **Approach safe hold — status 2026-08-03.** Automatic Approach is disabled
+> in the reference deployment. It remains disabled until the selected Google /
+> Nest source, or another supported source, exposes a reliable continuous
+> person-presence state. Package and Doorbell continue to be supported.
+
 ## The supported event model
 
 | Household outcome | Required source signal | House Chime route | Timing |
@@ -88,6 +93,26 @@ Do not turn the event into a fixed-duration helper or template binary sensor to
 simulate a person remaining at the door. Google Home availability and device
 capabilities can change; review them before enabling Approach with a different,
 continuous source.
+
+### Infrastructure required before enabling Approach
+
+Approach may be enabled only after the source path can provide all of the
+following semantics to Home Assistant:
+
+| Required capability | Why House Chime needs it |
+| --- | --- |
+| A dedicated front-door person-presence binary sensor | Keeps person presence distinct from general motion, packages, sound, or activity. |
+| An `on` transition when a person begins remaining at the door | Starts the configured loitering wait. |
+| A dependable `off` transition when that person leaves | Cancels the wait instead of announcing after the visitor has gone. |
+| `unknown` / `unavailable` reporting | Lets House Chime stop treating an uncertain source as confirmed presence. |
+| Stable entity identity across reloads and restarts | Prevents a source change from silently changing the operating policy. |
+
+As of the status date above, the Google / Nest path provides a person-detected
+event but not the required person-present and person-left state pair. That is
+the missing infrastructure. A Google-side event bridge, a timed reset helper,
+or a template that guesses departure does not satisfy this contract. Reassess
+only when Google exposes this continuous state directly, or when another
+supported integration publishes the five capabilities above.
 
 ## Deployment sequence
 

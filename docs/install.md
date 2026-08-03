@@ -245,6 +245,12 @@ platform exposes only a person event, but a short fixed reset is an event pulse,
 not proof that someone is still at the door. See [Front-door event
 routing](front-door-event-routing.md) before using a helper for Approach.
 
+**Approach safe hold (status 2026-08-03):** leave Approach disabled until the
+source publishes a dedicated, continuous front-door person-presence sensor with
+both person-present (`on`) and person-left (`off`) transitions. A Google / Nest
+person-detected event, event bridge, timed helper, or inferred template does
+not meet that requirement. Package and Doorbell routes remain available.
+
 Delayed Approach is the exception to the last sentence: House Chime directly
 listens to the configured person-presence binary sensor so it can enforce one
 continuous configurable wait. Package and Doorbell still originate in their source

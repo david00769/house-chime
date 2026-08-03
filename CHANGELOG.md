@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Document the dated Approach safe hold: automatic Approach remains disabled
+  until Google / Nest or another supported source provides a dedicated,
+  continuous person-present / person-left state, rather than a one-shot person
+  detection event.
+
 ## 0.6.1
 
 - Clear the configured person-presence sensor whenever an operator disables
