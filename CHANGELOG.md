@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.1
+
+- Clear the configured person-presence sensor whenever an operator disables
+  Approach, making the safe hold explicit in both route state and configuration.
+
 ## 0.6.0
 
 - Make automatic Approach direct-sensor-only: `house_chime.ingest_event` now

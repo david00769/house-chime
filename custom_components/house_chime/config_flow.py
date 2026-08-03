@@ -11,7 +11,13 @@ from homeassistant.const import CONF_NAME
 from homeassistant.core import callback
 from homeassistant.helpers import selector
 
-from .const import CONF_ACTIVE_CONFIG, DEFAULT_EVENTS, DEFAULT_NAME, DOMAIN
+from .const import (
+    CONF_ACTIVE_CONFIG,
+    DEFAULT_EVENTS,
+    DEFAULT_NAME,
+    DOMAIN,
+    EVENT_FRONT_DOOR_APPROACH,
+)
 from .discovery import (
     discover_device_trackers,
     discover_media_players,
@@ -639,6 +645,14 @@ class HouseChimeOptionsFlow(config_entries.OptionsFlow):
                 else existing
                 for existing in config.events
             ]
+            if event_id == EVENT_FRONT_DOOR_APPROACH and not user_input["enabled"]:
+                # A disabled Approach route must not retain a legacy event-only
+                # source.  This leaves automatic Approach in its explicit safe
+                # hold until an operator later selects a continuous sensor.
+                config.approach_delay = ApproachDelayConfig(
+                    sensor_entity_id=None,
+                    delay_seconds=config.approach_delay.delay_seconds,
+                )
             return self._save(config)
 
         fields = {

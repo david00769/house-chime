@@ -681,6 +681,36 @@ def test_options_flow_approach_timing_uses_sensors_and_persists_durations() -> N
     }
 
 
+def test_disabling_approach_clears_its_person_sensor() -> None:
+    config = AnnouncementConfig(
+        approach_delay=ApproachDelayConfig("binary_sensor.front_door_person", 30)
+    )
+    entry = SimpleNamespace(data={CONF_ACTIVE_CONFIG: config.to_dict()}, options={})
+    flow = make_options_flow(entry)
+    flow.hass = make_fake_hass([])
+
+    result = asyncio.run(
+        flow.async_step_event_front_door_approach(
+            {
+                "enabled": False,
+                "default_voice_id": "samantha",
+                "common_trigger_sound": {},
+                "duplicate_window_seconds": 60,
+            }
+        )
+    )
+
+    active_config = result["data"][CONF_ACTIVE_CONFIG]
+    approach = next(
+        event for event in active_config["events"] if event["id"] == "front_door_approach"
+    )
+    assert approach["enabled"] is False
+    assert active_config["approach_delay"] == {
+        "sensor_entity_id": None,
+        "delay_seconds": 30,
+    }
+
+
 def test_options_flow_review_reports_non_audible_setup_status() -> None:
     config = AnnouncementConfig(
         people=[PersonConfig(id="david", name="David", entity_id="person.david")],
