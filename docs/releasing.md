@@ -30,7 +30,7 @@ Stage only the reviewed release files, then make one descriptive commit:
 
 ```bash
 git add README.md CHANGELOG.md docs custom_components tests pyproject.toml uv.lock
-git commit -m "feat: delay automatic approach announcements"
+git commit -m "feat: harden automatic front-door routing"
 ```
 
 Check the resulting commit before publishing:
@@ -48,11 +48,11 @@ release branch when one is being used.
 
 ```bash
 git push origin main
-git tag -a v0.5.0 -m "House Chime 0.5.0"
-git push origin v0.5.0
+git tag -a v0.6.0 -m "House Chime 0.6.0"
+git push origin v0.6.0
 ```
 
-Create the corresponding GitHub release from `v0.5.0`, using the matching
+Create the corresponding GitHub release from `v0.6.0`, using the matching
 section of `CHANGELOG.md` as its notes. Confirm the pushed commit, tag, and
 release all point to the same package version in `manifest.json`.
 
@@ -67,8 +67,8 @@ Home Assistant:
 4. Open `Settings -> Devices & services -> House Chime` and confirm the
    integration loads without a Repair or new error log entry.
 
-HACS updates the public package only. Keep Sugarloaf-specific settings and
-acceptance evidence in the private planning workspace.
+HACS updates the public package only. Keep household-specific settings and
+acceptance evidence in a private workspace.
 
 ## 5. Post-update acceptance
 
@@ -76,16 +76,18 @@ Start with non-audible checks:
 
 1. Open **Configure** and confirm exactly four top-level sections: Household,
    Announcements, Playback, and Rules & diagnostics.
-2. In `Rules & diagnostics -> Approach timing & suppression`, select the
-   intended person-presence sensor, set the wait to 30 seconds, select the
-   front-door sensor, and confirm the after-door or Doorbell quiet time is editable and
-   defaults to 180 seconds.
+2. In `Rules & diagnostics -> Approach timing & suppression`, either select a
+   continuous person-presence sensor and set the wait to 30 seconds, or use the
+   safe hold by disabling Approach and leaving its sensor unselected. Select the
+   front-door sensor and confirm the after-door or Doorbell quiet time is
+   editable and defaults to 180 seconds.
 3. Confirm the behavior preview explains that continuous presence is required
    and that a person leaving, the front door opening, or a Doorbell event
    cancels the pending Approach.
-4. Disable any older automation that calls `house_chime.play` immediately from
-   the person-presence sensor. Update Package and Doorbell source automations to
-   call `house_chime.ingest_event`.
+4. Remove any automatic Approach service automation. Update Package and
+   Doorbell source automations to call `house_chime.ingest_event`; it rejects
+   `front_door_approach` by design. The configured continuous person sensor is
+   the one automatic Approach path.
 5. Use Review / Dry Run and `house_chime.resolve` for Approach while the door
    is closed, open, and in its cooldown. Confirm the suppression reason and
    UTC expiry are reported only for Approach.

@@ -44,8 +44,9 @@ async def async_sync_setup_issues(
     approach_sensor = config.approach_delay.sensor_entity_id
     problems: dict[str, str | None] = {
         "delayed_approach_setup_required": (
-            "Choose the person-presence sensor and replace any legacy immediate "
-            "Approach automation with house_chime.ingest_event."
+            "Choose a continuous person-presence sensor. House Chime listens to "
+            "that sensor directly; disable any legacy automatic Approach service "
+            "automation."
             if approach_enabled and not approach_sensor
             else None
         ),

@@ -40,7 +40,7 @@
     },
     "delayed_approach_setup_required": {
       "title": "Finish delayed Approach setup",
-      "description": "House Chime needs one setup step before automatic Approach announcements are protected from immediate person detections. {problem} Open House Chime options, choose Rules → Approach timing & suppression, then review your source automations."
+      "description": "House Chime needs one setup step before automatic Approach announcements are protected from immediate person detections. {problem} Open House Chime options, choose Rules → Approach timing & suppression, then select a continuous person-presence sensor and disable automatic Approach service automations."
     },
     "approach_sensor_problem": {
       "title": "Person-presence sensor needs attention",
@@ -285,7 +285,7 @@
       },
       "door_guard": {
         "title": "Approach timing & suppression",
-        "description": "Avoid announcing the same front-door encounter twice. House Chime waits while a person remains at the door, then cancels the pending Approach if they leave, the front door opens, or a Doorbell event arrives. Doorbell and Package are never delayed. Source automations should use Receive source event; Play now is a deliberate manual bypass.\n\nCurrent behaviour:\n{behavior_preview}",
+        "description": "Avoid announcing the same front-door encounter twice. House Chime waits while a person remains at the door, then cancels the pending Approach if they leave, the front door opens, or a Doorbell event arrives. Doorbell and Package are never delayed. Package and Doorbell source automations use Receive source event; the configured person sensor is the only automatic Approach path. Play now is a deliberate manual bypass.\n\nCurrent behaviour:\n{behavior_preview}",
         "data": {
           "approach_sensor_entity_id": "Person presence sensor",
           "approach_delay_seconds": "Wait before announcing",

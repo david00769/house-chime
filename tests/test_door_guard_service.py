@@ -16,6 +16,7 @@ from custom_components.house_chime.const import (
     CONF_EVENT_ID,
     DOMAIN,
     EVENT_FRONT_DOOR_DOORBELL,
+    EVENT_FRONT_DOOR_PACKAGE,
 )
 from custom_components.house_chime.models import (
     AnnouncementConfig,
@@ -142,7 +143,7 @@ class DoorGuardServiceTest(unittest.IsolatedAsyncioTestCase):
             "recent_doorbell_activity",
         )
 
-    async def test_policy_ingress_queues_approach_instead_of_playing_now(self) -> None:
+    async def test_policy_ingress_rejects_automatic_approach(self) -> None:
         config = AnnouncementConfig(
             approach_delay=ApproachDelayConfig(
                 "binary_sensor.front_door_person",
@@ -161,10 +162,50 @@ class DoorGuardServiceTest(unittest.IsolatedAsyncioTestCase):
             SimpleNamespace(data={CONF_EVENT_ID: "front_door_approach"})
         )
 
-        self.assertTrue(result["ok"])
-        self.assertTrue(result["queued"])
-        self.assertIsNotNone(result["wait_until"])
+        self.assertFalse(result["ok"])
+        self.assertFalse(result["queued"])
+        self.assertFalse(result["suppressed"])
+        self.assertEqual(result["errors"], ["approach_direct_sensor_only"])
+        self.assertIsNone(data["approach_wait_until"])
         self.assertEqual(hass.services.calls, [])
+
+    async def test_policy_ingress_keeps_package_and_doorbell_events(self) -> None:
+        config = AnnouncementConfig(
+            events=[
+                EventConfig(id=EVENT_FRONT_DOOR_PACKAGE, name="Package"),
+                EventConfig(id=EVENT_FRONT_DOOR_DOORBELL, name="Doorbell"),
+            ]
+        )
+        hass, data = fake_hass(config, [])
+
+        with (
+            patch(
+                "custom_components.house_chime._resolve_from_service_call",
+                new=AsyncMock(
+                    side_effect=lambda _hass, _data, call: AnnouncementResolution(
+                        event_id=call.data[CONF_EVENT_ID],
+                        ok=True,
+                    )
+                ),
+            ),
+            patch(
+                "custom_components.house_chime.play_music_assistant_announcement",
+                new=AsyncMock(return_value=PlaybackResult(dispatched_group_count=1)),
+            ),
+        ):
+            package = await hass.services.handlers[(DOMAIN, SERVICE_INGEST)](
+                SimpleNamespace(data={CONF_EVENT_ID: EVENT_FRONT_DOOR_PACKAGE})
+            )
+            doorbell = await hass.services.handlers[(DOMAIN, SERVICE_INGEST)](
+                SimpleNamespace(data={CONF_EVENT_ID: EVENT_FRONT_DOOR_DOORBELL})
+            )
+
+        self.assertTrue(package["ok"])
+        self.assertTrue(doorbell["ok"])
+        self.assertEqual(
+            data["last_triggered_by_event"].keys(),
+            {EVENT_FRONT_DOOR_PACKAGE, EVENT_FRONT_DOOR_DOORBELL},
+        )
 
     async def test_suppressed_play_never_dispatches_or_updates_duplicate_history(
         self,

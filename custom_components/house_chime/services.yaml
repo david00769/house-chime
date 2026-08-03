@@ -30,9 +30,10 @@ resolve:
 ingest_event:
   name: Receive source event
   description: >
-    Policy-aware entry point for source automations. Approach honours the
-    configured continuous-presence delay; Doorbell cancels and quiets Approach;
-    Package and Doorbell play without an added delay.
+    Policy-aware entry point for Package and Doorbell source automations.
+    Automatic Approach announcements are direct-sensor-only so House Chime can
+    verify continuous person presence; use the configured person-presence binary
+    sensor rather than this service for Approach.
   fields:
     event_id:
       name: Event
@@ -41,8 +42,6 @@ ingest_event:
       selector:
         select:
           options:
-            - label: Approach
-              value: front_door_approach
             - label: Package
               value: front_door_package
             - label: Doorbell
@@ -59,8 +58,9 @@ play:
   name: Play now
   description: >
     Immediately resolve and play an announcement through Music Assistant/Juke.
-    This operator bypass is for manual tests and dashboards; source automations
-    should use Receive source event.
+    This operator-only bypass is for a deliberate manual test, never an
+    automation route. Source automations may use Receive source event only for
+    Package and Doorbell.
   fields:
     event_id:
       name: Event
@@ -77,7 +77,7 @@ play:
               value: front_door_doorbell
     skip_duplicate_suppression:
       name: Skip duplicate suppression
-      description: Ignore the event duplicate window for a deliberate manual play test. Leave off for source automations.
+      description: Ignore the event duplicate window for a deliberate operator manual play test.
       required: false
       default: false
       selector:

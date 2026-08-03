@@ -40,18 +40,23 @@ House Chime registers:
 - `house_chime.set_playback_routes`
 - `house_chime.set_person_playback`
 
-Use `resolve` for dry runs, `ingest_event` for source automations, and `play`
-as the explicit **Play now** operator action. Manual
+Use `resolve` for dry runs, `ingest_event` for Package and Doorbell source
+automations, and `play` as the explicit **Play now** operator action. Manual
 operator test buttons may pass `skip_duplicate_suppression: true` so repeated
 tests are not blocked by the event duplicate window. Do not use that flag in
 real source automations.
 
-Use `ingest_event` from automations whose triggers come from the real source
-integration, for example a doorbell, camera, presence, or package-delivery
-integration. Configure the person-presence sensor directly in House Chime when
-using delayed automatic Approach announcements; do not also call
-`house_chime.play` from that sensor's automation or the call will be immediate.
-House Chime does not create or reset helper entities.
+Use `ingest_event` from the real source automation for **Package** and
+**Doorbell** events. Configure the person-presence sensor directly in House
+Chime for an automatic **Approach** announcement. The configured sensor is
+already an Approach trigger, so do not also call either `house_chime.ingest_event`
+or `house_chime.play` from an automation triggered by that same sensor. Doing
+so creates competing paths for one encounter and can bypass the intended
+loitering policy. House Chime does not create, reset, or infer helper entities.
+
+For a complete source-selection guide, including a Google Home / Nest event
+bridge and the difference between a person event and continuous person
+presence, see [Front-door event routing](docs/front-door-event-routing.md).
 
 Use `set_speakers` from HA Services when an operator or support workflow needs
 to replace the saved speaker list without opening the options form. The service
@@ -175,10 +180,14 @@ announcement, and the cancelled attempt does not consume the duplicate window.
 Repeated `on` updates do not restart an active wait.
 
 The configured sensor is the automatic delayed-Approach trigger. Remove or
-disable any older automation that calls `house_chime.play` immediately when
-the same person sensor turns on. Manual and other external
-`house_chime.play` calls for Approach intentionally remain immediate for
-operator tests and backwards compatibility.
+disable any automation that calls **either** `house_chime.ingest_event` or
+`house_chime.play` in response to that same sensor. Manual, deliberate
+`house_chime.play` calls for Approach remain immediate for operator tests and
+backwards compatibility.
+
+`house_chime.ingest_event` deliberately rejects `front_door_approach`.
+Automatic Approach is started only by the configured continuous person sensor;
+Package and Doorbell are the supported automatic source-event inputs.
 
 On the same screen, select the front-door `binary_sensor` and set
 `After-door or Doorbell quiet time` from 0 to 3600 seconds. The existing default is 180

@@ -436,49 +436,18 @@ def _register_services(hass: HomeAssistant) -> None:
         return resolution.to_dict()
 
     async def handle_ingest(call: ServiceCall) -> dict[str, Any]:
-        """Accept source events while preserving delayed-event policy."""
+        """Accept automatic source events that do not require continuous state."""
 
-        data = _first_entry_data(hass)
         event_id = call.data[CONF_EVENT_ID]
         if event_id != EVENT_FRONT_DOOR_APPROACH:
             return await handle_play(call)
 
-        config: AnnouncementConfig = data["config"]
-        policy = approach_pending_policy(config)
-        if not policy.trigger_entity_id:
-            return {
-                "event_id": event_id,
-                "ok": False,
-                "queued": False,
-                "suppressed": False,
-                "errors": ["approach_delay_not_configured"],
-            }
-        cancellation_reason = approach_wait_cancellation_reason(
-            config.approach_delay,
-            _state_map(hass),
-        )
-        if cancellation_reason:
-            _record_approach_delay_suppression(
-                hass,
-                data,
-                reason=cancellation_reason,
-                suppression_until=None,
-            )
-            return {
-                "event_id": event_id,
-                "ok": True,
-                "queued": False,
-                "suppressed": True,
-                "suppression_reason": cancellation_reason,
-            }
-        _start_approach_wait(hass, _entry_id_for_data(hass, data), data)
         return {
             "event_id": event_id,
-            "ok": True,
-            "queued": bool(data.get("approach_wait_until")),
-            "suppressed": not bool(data.get("approach_wait_until")),
-            "wait_until": data.get("approach_wait_until"),
-            "suppression_reason": data["status"].get("approach_suppression_reason"),
+            "ok": False,
+            "queued": False,
+            "suppressed": False,
+            "errors": ["approach_direct_sensor_only"],
         }
 
     async def handle_set_speakers(call: ServiceCall) -> dict[str, Any]:

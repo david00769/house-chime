@@ -179,10 +179,16 @@ becomes unknown or unavailable, the front door opens, or
 replayed and does not update duplicate-suppression history. Repeated `on`
 updates do not extend the deadline.
 
-Do not keep an older automation that calls `house_chime.play` when the same
-person sensor turns on. That direct service call remains immediate and would
-bypass the automatic wait. Manual Approach calls also remain immediate so
-operators can deliberately test playback.
+The configured person sensor is the automatic delayed-Approach trigger. Do not
+keep an automation that calls either `house_chime.ingest_event` or
+`house_chime.play` when that **same** sensor turns on. Those competing paths
+make one person encounter ambiguous; `play` also remains immediate and bypasses
+the automatic wait. Manual Approach calls remain immediate so operators can
+deliberately test playback.
+
+`house_chime.ingest_event` accepts automatic Package and Doorbell events only.
+It rejects `front_door_approach`, because an event cannot prove that a person
+remains at the door for the configured wait.
 
 On the same screen, select a front-door `binary_sensor` and set
 `After-door or Doorbell quiet time` from 0 to 3600 seconds. The default 180 seconds is 3
@@ -209,8 +215,12 @@ an already-on person sensor does not create a stale post-startup announcement.
 
 ## Automation Pattern
 
-Use the real source integration as the automation trigger, add House Chime
-conditions when useful, then call `house_chime.ingest_event`.
+Use the real source integration as the automation trigger for **Package** and
+**Doorbell**, add House Chime conditions when useful, then call
+`house_chime.ingest_event`. For automatic Approach, configure one continuous
+person-presence binary sensor in `Rules & diagnostics` and let House Chime own
+that sensor transition. Do not add an Approach source automation: automatic
+Approach service calls are rejected.
 
 Example shape:
 
@@ -229,9 +239,11 @@ actions:
       event_id: front_door_package
 ```
 
-Do not create `input_boolean` handoff helpers for package, approach, or doorbell
-events. House Chime does not own source-event capture; it owns event resolution,
-diagnostics, and playback.
+House Chime does not own source-event capture; it owns event resolution,
+diagnostics, and playback. A bridge helper can be appropriate when an external
+platform exposes only a person event, but a short fixed reset is an event pulse,
+not proof that someone is still at the door. See [Front-door event
+routing](front-door-event-routing.md) before using a helper for Approach.
 
 Delayed Approach is the exception to the last sentence: House Chime directly
 listens to the configured person-presence binary sensor so it can enforce one

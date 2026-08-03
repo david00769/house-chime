@@ -19,8 +19,10 @@ repeatable tests and upstream validation.
    encounter quiet time (180 seconds by default). New Approach detections during
    that window are suppressed.
 5. Package and Doorbell announcements are never delayed.
-6. Source automations call `house_chime.ingest_event`. `house_chime.play` remains
-   an explicit operator-only **Play now** bypass for testing and dashboards.
+6. Package and Doorbell source automations call `house_chime.ingest_event`.
+   The configured person-presence sensor is the automatic Approach path;
+   `house_chime.play` remains an explicit operator-only **Play now** bypass for
+   testing and dashboards.
 
 ## Architecture and reuse
 
@@ -67,8 +69,8 @@ Entry runtime state is attached to `ConfigEntry.runtime_data` and mirrored in
    authorized.
 4. Require green CI/HACS/hassfest checks and review approval before merge.
 5. Tag and publish v0.5.0, then upgrade through HACS.
-6. Configure both sensors/timers, replace legacy immediate Approach automations
-   with `house_chime.ingest_event`, and run the documented live acceptance test.
+6. Configure both sensors/timers, remove competing Approach automations for the
+   configured person sensor, and run the documented live acceptance test.
 
 Commit, push, release, HACS installation, and live-home changes are deliberately
 outside local implementation and require separate authorization.

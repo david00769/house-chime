@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0
+
+- Make automatic Approach direct-sensor-only: `house_chime.ingest_event` now
+  rejects `front_door_approach` with `approach_direct_sensor_only`.
+- Keep Package and Doorbell as the only automatic source-event ingress, so a
+  one-shot person-detection event cannot be mistaken for continuous loitering.
+- Clarify service, Repairs, options-flow, installation, release, and routing
+  guidance for continuous person presence, safe-hold deployments, and legacy
+  Approach automation migration.
+
 ## 0.5.0
 
 - Add configurable delayed automatic Approach announcements, defaulting to 30
