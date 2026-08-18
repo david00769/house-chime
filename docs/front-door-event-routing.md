@@ -89,6 +89,21 @@ the Google Home script editor but do not expose a persistent Home Assistant
 binary sensor. Treat that starter as an **event**, not as proof of loitering.
 Keep any bridge from that event disabled for House Chime automatic Approach.
 
+### Do not use a display-mediated Assistant command as a bridge
+
+The Google Home Script Editor action `assistant.command.OkGoogle` makes the
+selected speaker or display execute a spoken Assistant request. It is not a
+webhook, a Home Assistant event, or a direct service call. Therefore, do not
+use it to run an exposed Home Assistant entity name in response to a Nest
+`PersonDetection` starter.
+
+If the Assistant cannot resolve that name, the target display audibly reports
+that it does not understand. Disable the routine rather than retrying it or
+adding a timed helper. A disabled routine preserves its script for diagnosis
+without producing further spoken errors. Re-enable only after replacing the
+route with a supported, independently verified event integration that provides
+the required continuous person-presence semantics.
+
 Do not turn the event into a fixed-duration helper or template binary sensor to
 simulate a person remaining at the door. Google Home availability and device
 capabilities can change; review them before enabling Approach with a different,

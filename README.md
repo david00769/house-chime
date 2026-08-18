@@ -60,6 +60,11 @@ routing](docs/front-door-event-routing.md). Approach remains disabled until a
 source can report both person-present and person-left state, rather than a
 one-shot detection event.
 
+Do not use a Google Home Script Editor `assistant.command.OkGoogle` action on
+a speaker or display as a Home Assistant event bridge. It executes a voice
+request on that device; it is neither a webhook nor a Home Assistant service
+call, and an unrecognised request produces an audible Assistant error.
+
 Use `set_speakers` from HA Services when an operator or support workflow needs
 to replace the saved speaker list without opening the options form. The service
 accepts a list of `media_player` entity IDs and persists only currently

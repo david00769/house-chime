@@ -6,6 +6,9 @@
   until Google / Nest or another supported source provides a dedicated,
   continuous person-present / person-left state, rather than a one-shot person
   detection event.
+- Document that a Google Home Script Editor `assistant.command.OkGoogle` action
+  on a speaker or display is an audible voice-command route, not a Home
+  Assistant event bridge; leave an unrecognised person-event routine disabled.
 
 ## 0.6.1
 
