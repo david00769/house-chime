@@ -15,6 +15,10 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
+          # The PolyForm Noncommercial + MIT license (see LICENSE) is not one GitHub
+          # can identify, so HACS's license check reports NOASSERTION. It only gates
+          # the HACS default store; this is installed as a custom repository.
+          ignore: license
 
   hassfest:
     name: hassfest
