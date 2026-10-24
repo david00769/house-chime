@@ -330,3 +330,11 @@ screenshots, generated audio, voice profiles, or private testing notes here.
 
 Keep private project memory in the ignored `project-memory/` folder or in the
 separate private planning workspace.
+
+## License
+
+MIT up to commit `9f8020b`; david00769's later work is under the
+[PolyForm Noncommercial License 1.0.0](LICENSES/PolyForm-Noncommercial-1.0.0.md),
+free for personal, hobby, research, educational, charitable and government use.
+Commercial use needs a license from [david00769](https://github.com/david00769).
+See [LICENSE](LICENSE).
