@@ -336,5 +336,6 @@ separate private planning workspace.
 MIT up to commit `9f8020b`; david00769's later work is under the
 [PolyForm Noncommercial License 1.0.0](LICENSES/PolyForm-Noncommercial-1.0.0.md),
 free for personal, hobby, research, educational, charitable and government use.
-Commercial use needs a license from [david00769](https://github.com/david00769).
+Commercial use needs a license from [david00769](https://github.com/david00769)
+(davidsiroky@me.com).
 See [LICENSE](LICENSE).
